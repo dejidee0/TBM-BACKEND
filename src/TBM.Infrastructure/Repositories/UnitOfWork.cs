@@ -37,7 +37,7 @@ public class UnitOfWork : IUnitOfWork
         IRoleRepository roleRepository,
         IAuditLogRepository auditLogs,
         ISettingRepository settingRepository,
-        IOrderStatusHistoryRepository orderStatusHistoryRepository,
+        IOrderStatusHistoryRepository orderStatusHistories,
         ICategoryRepository categoryRepository,
         IProductRepository productRepository,
         IProductImageRepository productImageRepository,
@@ -52,7 +52,7 @@ public class UnitOfWork : IUnitOfWork
         Roles = roleRepository;
         AuditLogs = auditLogs;
         Categories = categoryRepository;
-        OrderStatusHistories = orderStatusHistoryRepository;
+        OrderStatusHistories = orderStatusHistories;
 
         Settings = settingRepository;
         Products = productRepository;

@@ -4,5 +4,6 @@ namespace TBM.Core.Interfaces.Repositories;
 
 public interface IOrderStatusHistoryRepository
 {
-    Task AddAsync(OrderStatusHistory history);
+    Task AddAsync(OrderStatusHistory entity);
+    IQueryable<OrderStatusHistory> GetQueryable();
 }

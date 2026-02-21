@@ -1,55 +1,60 @@
-using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using TBM.Application.Extensions;
-using TBM.Application.Helpers;
-using TBM.Application.Services;
-using TBM.Infrastructure.Extensions;
+using System.Text;
+using System.Threading.RateLimiting;
 using TBM.API.Swagger;
-using TBM.Infrastructure.Data;
+using TBM.Application.DTOs.Settings;
+using TBM.Application.Helpers;
+using TBM.Application.Interfaces;
+using TBM.Application.Interfaces.Security;
+using TBM.Application.Services;
 using TBM.Core.Interfaces.AI;
 using TBM.Infrastructure.AI;
-using TBM.Application.Interfaces.Security;
+using TBM.Infrastructure.Data;
+using TBM.Infrastructure.Extensions;
+using TBM.Application.Extensions;
 using TBM.Infrastructure.Security;
-using TBM.Application.Interfaces;
-using Microsoft.AspNetCore.RateLimiting;
-using System.Threading.RateLimiting;
-using TBM.Application.DTOs.Settings;
 
+var builder = WebApplication.CreateBuilder(args);
 
-var builder = WebApplication.CreateBuilder(args); 
-
-// Add services to the container    
+// ==============================
+// Controllers + JSON
+// ==============================
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        // ✅ FIX: Handle circular references in JSON serialization
-        options.JsonSerializerOptions.ReferenceHandler = 
+        options.JsonSerializerOptions.ReferenceHandler =
             System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
-        
-        // Make JSON more readable (optional, can remove in production)
         options.JsonSerializerOptions.WriteIndented = true;
     });
 
 builder.Services.AddEndpointsApiExplorer();
+
+// ==============================
+// Swagger
+// ==============================
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new OpenApiInfo { Title = "TBM Digital Platform API", Version = "v1" });
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "TBM Digital Platform API",
+        Version = "v1"
+    });
 
     options.OperationFilter<FileUploadOperationFilter>();
-    
-    // Add JWT authentication to Swagger
+
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
         Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer",     
+        Scheme = "Bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
         Description = "Enter 'Bearer' [space] and then your token"
     });
-    
+
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -66,12 +71,53 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-var encryptionKey = builder.Configuration["Security:EncryptionKey"];
+// ==============================
+// Infrastructure (Db + Repos)
+// ==============================
+builder.Services.AddInfrastructureServices(builder.Configuration);
+
+// ==============================
+// Application Layer
+// ==============================
+builder.Services.AddApplicationServices();
+
+// ==============================
+// Admin Services
+// ==============================
+builder.Services.AddScoped<AdminUserService>();
+builder.Services.AddScoped<AdminOrderService>();
+builder.Services.AddScoped<AdminAnalyticsService>();
+builder.Services.AddScoped<AdminSettingsService>();
+
+// ==============================
+// External Services
+// ==============================
+builder.Services.AddHttpClient<PaystackService>();
+builder.Services.AddHttpClient<IAIProvider, ReplicateAIProvider>();
+
+builder.Services.AddScoped<AIService>();
+
+// ==============================
+// Security
+// ==============================
+var encryptionKey = builder.Configuration["Security:EncryptionKey"]
+    ?? throw new InvalidOperationException("Encryption key not configured");
 
 builder.Services.AddSingleton<IEncryptionService>(
-    new AesEncryptionService(encryptionKey!)
+    new AesEncryptionService(encryptionKey)
 );
 
+// ==============================
+// Settings + Cache
+// ==============================
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ISettingsManager, SettingsManager>();
+builder.Services.AddScoped<AuditService>();
+
+// ==============================
+// Rate Limiting
+// ==============================
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -79,12 +125,16 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("DynamicPolicy", context =>
     {
         var settingsManager = context.RequestServices.GetRequiredService<ISettingsManager>();
-        var generalSettings = settingsManager.GetAsync<GeneralSettingsDto>("General").Result;
+        var generalSettings = settingsManager
+            .GetAsync<GeneralSettingsDto>("General")
+            .GetAwaiter().GetResult();
 
         var permitLimit = generalSettings?.ApiRateLimit ?? 1000;
 
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.User.Identity?.Name ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            partitionKey: context.User.Identity?.Name ??
+                          context.Connection.RemoteIpAddress?.ToString() ??
+                          "anonymous",
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = permitLimit,
@@ -95,27 +145,18 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
+// ==============================
+// JWT Configuration
+// ==============================
+builder.Services.Configure<JwtSettings>(
+    builder.Configuration.GetSection("JwtSettings"));
 
-builder.Services.AddMemoryCache();
-builder.Services.AddScoped<ISettingsManager, SettingsManager>();
-builder.Services.AddMemoryCache();
-builder.Services.AddHttpContextAccessor();
+var jwtSettings = builder.Configuration
+    .GetSection("JwtSettings")
+    .Get<JwtSettings>()
+    ?? throw new InvalidOperationException("JWT settings not configured");
 
-builder.Services.AddScoped<IEncryptionService, EncryptionService>();
-builder.Services.AddScoped<ISettingsManager, SettingsManager>();
-builder.Services.AddScoped<AuditService>();
-builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
-builder.Services.AddScoped<AdminAnalyticsService>();
-
-
-
-
-// Configure JWT Settings
-builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
-
-// JWT Authentication
-var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>();
-var key = Encoding.UTF8.GetBytes(jwtSettings?.SecretKey ?? throw new InvalidOperationException("JWT Secret Key not configured"));
+var key = Encoding.UTF8.GetBytes(jwtSettings.SecretKey);
 
 builder.Services.AddAuthentication(options =>
 {
@@ -124,8 +165,9 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false; // Changed to true for production
+    options.RequireHttpsMetadata = false;
     options.SaveToken = true;
+
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
@@ -141,7 +183,9 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
+// ==============================
 // CORS
+// ==============================
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -152,44 +196,37 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Infrastructure Services (Database, Repositories)
-builder.Services.AddInfrastructureServices(builder.Configuration);
-
-// Application Services (Business Logic)
-builder.Services.AddApplicationServices();
-builder.Services.AddHttpClient<IAIProvider, ReplicateAIProvider>();
-
-builder.Services.AddScoped<AIService>();
-
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
-// Enable Swagger in all environments (not just Development)
-app.UseRateLimiter();
+// ==============================
+// Middleware Pipeline
+// ==============================
 app.UseDeveloperExceptionPage();
+
+app.UseRateLimiter();
 
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "TBM Digital Platform API v1");
-    c.RoutePrefix = string.Empty; // Set Swagger at root URL
+    c.RoutePrefix = string.Empty;
 });
 
-//app.UseHttpsRedirection();
-
-app.UseCors("AllowAll"); 
+app.UseCors("AllowAll");
 
 app.UseAuthentication();
 app.UseMiddleware<TBM.API.Middleware.MaintenanceMiddleware>();
-
 app.UseAuthorization();
 
 app.MapControllers();
 
-// Seed database
+// ==============================
+// Seed DB (Dev only)
+// ==============================
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
+
     try
     {
         var context = scope.ServiceProvider
