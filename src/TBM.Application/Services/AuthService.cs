@@ -352,6 +352,40 @@ await _emailService.SendVerificationEmailAsync(
         return ApiResponse<bool>.SuccessResponse(true, "Email verified successfully");
     }
 
+    public async Task<ApiResponse<bool>> VerifyEmailWithCodeAsync(string email, string code)
+    {
+        var user = await _unitOfWork.Users.GetByEmailAsync(email);
+
+        if (user == null)
+        {
+            return ApiResponse<bool>.ErrorResponse("Invalid or expired verification code");
+        }
+
+        if (user.EmailVerified)
+        {
+            return ApiResponse<bool>.SuccessResponse(true, "Email already verified");
+        }
+
+        var isCodeMatch = !string.IsNullOrWhiteSpace(user.EmailVerificationToken) &&
+                          string.Equals(user.EmailVerificationToken, code, StringComparison.OrdinalIgnoreCase);
+        var isCodeValid = user.EmailVerificationTokenExpiry.HasValue &&
+                          user.EmailVerificationTokenExpiry.Value > DateTime.UtcNow;
+
+        if (!isCodeMatch || !isCodeValid)
+        {
+            return ApiResponse<bool>.ErrorResponse("Invalid or expired verification code");
+        }
+
+        user.EmailVerified = true;
+        user.EmailVerificationToken = null;
+        user.EmailVerificationTokenExpiry = null;
+
+        await _unitOfWork.Users.UpdateAsync(user);
+        await _unitOfWork.SaveChangesAsync();
+
+        return ApiResponse<bool>.SuccessResponse(true, "Email verified successfully");
+    }
+
    public async Task<ApiResponse<TokenResponseDto>> AdminLoginAsync(AdminLoginDto dto)
 {
     var user = await _unitOfWork.Users.GetByEmailWithRolesAsync(dto.Email);

@@ -9,4 +9,8 @@ public class CreateOrderDto
     public string ShippingState { get; set; } = string.Empty;
     public string? ShippingNotes { get; set; }
     public string? CustomerNotes { get; set; }
+    public string? PromoCode { get; set; }
+    public decimal? ShippingCost { get; set; }
+    public decimal? Tax { get; set; }
+    public decimal? Discount { get; set; }
 }

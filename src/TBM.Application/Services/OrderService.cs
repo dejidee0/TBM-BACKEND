@@ -126,10 +126,24 @@ public class OrderService : IOrderService
             
             // Calculate totals
             var subTotal = cart.Items.Sum(i => i.Quantity * i.UnitPrice);
-            var shippingCost = 0m; // TODO: Implement shipping calculation
-            var tax = 0m; // TODO: Implement tax calculation
-            var discount = 0m;
+            var shippingCost = Math.Max(0m, dto.ShippingCost ?? 0m);
+            var tax = Math.Max(0m, dto.Tax ?? 0m);
+            var discount = Math.Max(0m, dto.Discount ?? 0m);
+
+            if (discount > subTotal + shippingCost + tax)
+            {
+                return ApiResponse<OrderDto>.ErrorResponse("Discount cannot exceed order amount");
+            }
+
             var total = subTotal + shippingCost + tax - discount;
+
+            var customerNotes = dto.CustomerNotes;
+            if (!string.IsNullOrWhiteSpace(dto.PromoCode))
+            {
+                customerNotes = string.IsNullOrWhiteSpace(customerNotes)
+                    ? $"Promo: {dto.PromoCode.Trim().ToUpperInvariant()}"
+                    : $"{customerNotes}{Environment.NewLine}Promo: {dto.PromoCode.Trim().ToUpperInvariant()}";
+            }
             
             // Create order
             var order = new Order
@@ -149,7 +163,7 @@ public class OrderService : IOrderService
                 ShippingCity = dto.ShippingCity,
                 ShippingState = dto.ShippingState,
                 ShippingNotes = dto.ShippingNotes,
-                CustomerNotes = dto.CustomerNotes
+                CustomerNotes = customerNotes
             };
             
             await _unitOfWork.Orders.CreateAsync(order);

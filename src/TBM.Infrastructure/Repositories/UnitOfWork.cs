@@ -13,10 +13,12 @@ public class UnitOfWork : IUnitOfWork
 
     // User repositories
     public IUserRepository Users { get; }
+    public IUserAddressRepository UserAddresses { get; }
     public IRoleRepository Roles { get; }
 
     public IAIProjectRepository AIProjects { get; }
     public IAIDesignRepository AIDesigns { get; }
+    public IAIUsageRepository AIUsages { get; }
     public ISettingRepository Settings { get; }
     public IOrderStatusHistoryRepository OrderStatusHistories { get; }
 
@@ -34,6 +36,7 @@ public class UnitOfWork : IUnitOfWork
     public UnitOfWork(
         ApplicationDbContext context,
         IUserRepository userRepository,
+        IUserAddressRepository userAddressRepository,
         IRoleRepository roleRepository,
         IAuditLogRepository auditLogs,
         ISettingRepository settingRepository,
@@ -44,11 +47,13 @@ public class UnitOfWork : IUnitOfWork
         ICartRepository cartRepository,
         IAIProjectRepository aiProjects,
         IAIDesignRepository aiDesigns,
+        IAIUsageRepository aiUsages,
         IWebhookEventRepository webhookEvents,
         IOrderRepository orderRepository)
     {
         _context = context;
         Users = userRepository;
+        UserAddresses = userAddressRepository;
         Roles = roleRepository;
         AuditLogs = auditLogs;
         Categories = categoryRepository;
@@ -60,6 +65,7 @@ public class UnitOfWork : IUnitOfWork
         Carts = cartRepository;
         AIProjects = aiProjects;
         AIDesigns = aiDesigns;
+        AIUsages = aiUsages;
         Orders = orderRepository;
         WebhookEvents = webhookEvents;
     }

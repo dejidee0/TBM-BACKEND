@@ -42,6 +42,7 @@ public static class ServiceExtensions
 
         // Repositories
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IUserAddressRepository, UserAddressRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<IProductRepository, ProductRepository>();
@@ -61,6 +62,7 @@ public static class ServiceExtensions
 // AI repositories
 services.AddScoped<IAIProjectRepository, AIProjectRepository>();
 services.AddScoped<IAIDesignRepository, AIDesignRepository>();
+services.AddScoped<IAIUsageRepository, AIUsageRepository>();
 
 // Cloudinary
 services.Configure<CloudinarySettings>(configuration.GetSection("Cloudinary"));

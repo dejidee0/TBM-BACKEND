@@ -100,9 +100,9 @@ Used by most `api/v1` business endpoints.
   "message": "Operation successful",
   "data": {},
   "errors": []
-}
+} 
 ```
-
+ 
 Fields:
 - `success`: `bool`
 - `message`: `string`

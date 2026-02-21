@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using TBM.Application.DTOs.Auth;
+using TBM.Application.DTOs.Common;
 using TBM.Application.Interfaces;
 
 namespace TBM.API.Controllers.V1;
@@ -9,6 +10,8 @@ namespace TBM.API.Controllers.V1;
 [ApiController]
 [EnableRateLimiting("DynamicPolicy")]
 [Route("api/v1/[controller]")]
+[Route("api/[controller]")]
+[Route("[controller]")]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
@@ -93,12 +96,27 @@ public class AuthController : ControllerBase
     }
     
     /// <summary>
-    /// Verify email address with token
+    /// Verify email address with token query OR body payload { email, code }
     /// </summary>
     [HttpPost("verify-email")]
-    public async Task<IActionResult> VerifyEmail([FromQuery] string token)
+    public async Task<IActionResult> VerifyEmail([FromQuery] string? token, [FromBody] VerifyEmailCodeDto? dto)
     {
-        var result = await _authService.VerifyEmailAsync(token);
+        ApiResponse<bool> result;
+
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            result = await _authService.VerifyEmailAsync(token);
+        }
+        else if (dto != null && !string.IsNullOrWhiteSpace(dto.Email) && !string.IsNullOrWhiteSpace(dto.Code))
+        {
+            result = await _authService.VerifyEmailWithCodeAsync(dto.Email, dto.Code);
+        }
+        else
+        {
+            return BadRequest(ApiResponse<bool>.ErrorResponse(
+                "Provide either token query parameter or { email, code } in request body."
+            ));
+        }
         
         if (!result.Success)
         {
@@ -149,5 +167,41 @@ public class AuthController : ControllerBase
         // In a stateless JWT system, logout is handled client-side by discarding tokens
         // Optionally, you could invalidate the refresh token in the database here
         return Ok(new { message = "Logged out successfully" });
+    }
+
+    /// <summary>
+    /// Google OAuth is currently not configured on this backend.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("~/auth/google")]
+    public IActionResult GoogleOAuth()
+    {
+        var result = ApiResponse<bool>.ErrorResponse(
+            "Google OAuth is not configured yet.",
+            new List<string>
+            {
+                "Use POST /api/v1/auth/login with email/password.",
+                "If OAuth is required, configure provider credentials and callback settings."
+            });
+
+        return StatusCode(StatusCodes.Status501NotImplemented, result);
+    }
+
+    /// <summary>
+    /// Apple OAuth is currently not configured on this backend.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("~/auth/apple")]
+    public IActionResult AppleOAuth()
+    {
+        var result = ApiResponse<bool>.ErrorResponse(
+            "Apple OAuth is not configured yet.",
+            new List<string>
+            {
+                "Use POST /api/v1/auth/login with email/password.",
+                "If OAuth is required, configure provider credentials and callback settings."
+            });
+
+        return StatusCode(StatusCodes.Status501NotImplemented, result);
     }
 }

@@ -39,11 +39,53 @@ public class OrdersController : ControllerBase
         
         return Ok(result);
     }
+
+    /// <summary>
+    /// Compatibility endpoint for frontend route: /api/orders/:orderId
+    /// </summary>
+    [HttpGet("~/api/orders/{orderId:guid}")]
+    public async Task<IActionResult> GetOrderCompatibility(Guid orderId)
+    {
+        var userId = GetUserId();
+        var result = await _orderService.GetOrderByIdAsync(orderId, userId);
+
+        if (!result.Success || result.Data == null)
+        {
+            return NotFound(new { success = false, message = result.Message });
+        }
+
+        return Ok(result.Data);
+    }
+
+    /// <summary>
+    /// Compatibility endpoint for frontend route: /api/orders
+    /// </summary>
+    [HttpGet("~/api/orders")]
+    public async Task<IActionResult> GetMyOrdersCompatibility()
+    {
+        var userId = GetUserId();
+        var result = await _orderService.GetUserOrdersAsync(userId);
+
+        if (!result.Success || result.Data == null)
+        {
+            return BadRequest(new { success = false, message = result.Message });
+        }
+
+        return Ok(result.Data.Select(o => new
+        {
+            id = o.Id,
+            orderNumber = o.OrderNumber,
+            status = o.StatusName,
+            paymentStatus = o.PaymentStatusName,
+            total = o.Total,
+            createdAt = o.CreatedAt
+        }));
+    }
     
     /// <summary>
     /// Get order by ID (user's own order)
     /// </summary>
-    [HttpGet("{orderId}")]
+    [HttpGet("{orderId:guid}")]
     public async Task<IActionResult> GetOrder(Guid orderId)
     {
         var userId = GetUserId();
@@ -55,6 +97,100 @@ public class OrdersController : ControllerBase
         }
         
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Get invoice URL for a user order
+    /// </summary>
+    [HttpGet("{orderId:guid}/invoice")]
+    [HttpGet("~/api/orders/{orderId:guid}/invoice")]
+    public async Task<IActionResult> GetOrderInvoice(Guid orderId)
+    {
+        var userId = GetUserId();
+        var result = await _orderService.GetOrderByIdAsync(orderId, userId);
+
+        if (!result.Success || result.Data == null)
+        {
+            return NotFound(new { success = false, message = result.Message });
+        }
+
+        var invoiceUrl = Url.Action(
+            action: nameof(GetInvoiceDocument),
+            controller: "Orders",
+            values: new { orderId },
+            protocol: Request.Scheme);
+
+        if (string.IsNullOrWhiteSpace(invoiceUrl))
+        {
+            invoiceUrl = $"{Request.Scheme}://{Request.Host}/api/v1/orders/{orderId}/invoice/document";
+        }
+
+        return Ok(new
+        {
+            success = true,
+            url = invoiceUrl
+        });
+    }
+
+    /// <summary>
+    /// Get invoice data for a user order
+    /// </summary>
+    [HttpGet("{orderId:guid}/invoice/document")]
+    public async Task<IActionResult> GetInvoiceDocument(Guid orderId)
+    {
+        var userId = GetUserId();
+        var result = await _orderService.GetOrderByIdAsync(orderId, userId);
+
+        if (!result.Success || result.Data == null)
+        {
+            return NotFound(new { success = false, message = result.Message });
+        }
+
+        var order = result.Data;
+
+        return Ok(new
+        {
+            invoiceNumber = $"INV-{order.OrderNumber}",
+            orderNumber = order.OrderNumber,
+            issuedAt = DateTime.UtcNow,
+            customer = new
+            {
+                name = order.UserFullName,
+                email = order.UserEmail,
+                phone = order.ShippingPhone
+            },
+            shippingAddress = new
+            {
+                fullName = order.ShippingFullName,
+                address = order.ShippingAddress,
+                city = order.ShippingCity,
+                state = order.ShippingState
+            },
+            items = order.Items.Select(i => new
+            {
+                productId = i.ProductId,
+                name = i.ProductName,
+                sku = i.ProductSKU,
+                quantity = i.Quantity,
+                unitPrice = i.UnitPrice,
+                subTotal = i.SubTotal
+            }),
+            totals = new
+            {
+                subTotal = order.SubTotal,
+                shipping = order.ShippingCost,
+                tax = order.Tax,
+                discount = order.Discount,
+                total = order.Total
+            },
+            payment = new
+            {
+                status = order.PaymentStatusName,
+                method = order.PaymentMethodName,
+                reference = order.PaymentReference,
+                paidAt = order.PaidAt
+            }
+        });
     }
     
     /// <summary>

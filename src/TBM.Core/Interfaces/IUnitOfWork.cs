@@ -7,10 +7,12 @@ public interface IUnitOfWork : IDisposable
 {
     // User repositories
     IUserRepository Users { get; }
+    IUserAddressRepository UserAddresses { get; }
     IRoleRepository Roles { get; }
 
     IAIProjectRepository AIProjects { get; }
     IAIDesignRepository AIDesigns { get; }
+    IAIUsageRepository AIUsages { get; }
 
 ISettingRepository Settings { get; }
 IAuditLogRepository AuditLogs { get; }

@@ -89,6 +89,23 @@ public async Task<List<PaymentDistributionDto>> GetPaymentDistributionAsync()
             .Include(o => o.User)
             .FirstOrDefaultAsync(o => o.OrderNumber == orderNumber);
     }
+
+    public async Task<Order?> GetByPaymentReferenceAsync(string paymentReference, Guid? userId = null)
+    {
+        var query = _context.Orders
+            .Include(o => o.Items)
+            .Include(o => o.User)
+            .Where(o => o.PaymentReference == paymentReference);
+
+        if (userId.HasValue)
+        {
+            query = query.Where(o => o.UserId == userId.Value);
+        }
+
+        return await query
+            .OrderByDescending(o => o.CreatedAt)
+            .FirstOrDefaultAsync();
+    }
     
     public async Task<(IEnumerable<Order> Items, int TotalCount)> GetPagedAsync(
         int pageNumber,
