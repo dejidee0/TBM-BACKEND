@@ -2,6 +2,8 @@ using TBM.Core.Entities.Audit;
 using TBM.Core.Interfaces.Repositories;
 using TBM.Infrastructure.Data;
 
+namespace TBM.Infrastructure.Repositories;
+
 public class AuditLogRepository : IAuditLogRepository
 {
     private readonly ApplicationDbContext _context;

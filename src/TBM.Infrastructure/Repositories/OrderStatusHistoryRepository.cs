@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using TBM.Core.Entities.Orders;
 using TBM.Core.Interfaces.Repositories;
 using TBM.Infrastructure.Data;
@@ -13,8 +14,13 @@ public class OrderStatusHistoryRepository : IOrderStatusHistoryRepository
         _context = context;
     }
 
-    public async Task AddAsync(OrderStatusHistory history)
+    public async Task AddAsync(OrderStatusHistory entity)
     {
-        await _context.OrderStatusHistories.AddAsync(history);
+        await _context.OrderStatusHistories.AddAsync(entity);
+    }
+
+    public IQueryable<OrderStatusHistory> GetQueryable()
+    {
+        return _context.OrderStatusHistories.AsQueryable();
     }
 }

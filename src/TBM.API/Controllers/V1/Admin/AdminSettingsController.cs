@@ -23,7 +23,8 @@ public class AdminSettingsController : ControllerBase
     [HttpGet("payment")]
     public async Task<IActionResult> GetPayment()
     {
-        var data = await _service.GetCategoryAsync<PaymentSettingsDto>("Payment");
+        var data = await _service.GetCategoryAsync<PaymentSettingsDto>("Payment")
+            ?? new PaymentSettingsDto();
         return Ok(data);
     }
 
@@ -37,7 +38,8 @@ public class AdminSettingsController : ControllerBase
     [HttpGet("ai")]
     public async Task<IActionResult> GetAI()
     {
-        var data = await _service.GetCategoryAsync<AISettingsDto>("AI");
+        var data = await _service.GetCategoryAsync<AISettingsDto>("AI")
+            ?? new AISettingsDto();
         return Ok(data);
     }
 
@@ -51,7 +53,12 @@ public class AdminSettingsController : ControllerBase
     [HttpGet("general")]
     public async Task<IActionResult> GetGeneral()
     {
-        var data = await _service.GetCategoryAsync<GeneralSettingsDto>("General");
+        var data = await _service.GetCategoryAsync<GeneralSettingsDto>("General")
+            ?? new GeneralSettingsDto
+            {
+                PlatformName = string.Empty,
+                SupportEmail = string.Empty
+            };
         return Ok(data);
     }
 

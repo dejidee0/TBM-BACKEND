@@ -46,9 +46,12 @@ public static class ServiceExtensions
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IProductImageRepository, ProductImageRepository>();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IOrderStatusHistoryRepository, OrderStatusHistoryRepository>();
         services.AddScoped<ICartRepository, CartRepository>();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<ISettingRepository, SettingRepository>();
+        services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
 
 
         // UnitOfWork
@@ -63,8 +66,7 @@ services.AddScoped<IAIDesignRepository, AIDesignRepository>();
 services.Configure<CloudinarySettings>(configuration.GetSection("Cloudinary"));
 services.AddScoped<IImageStorageService, CloudinaryStorageService>();
 
-
-// AI Services
+    services.AddScoped<ISettingRepository, SettingRepository>();
 services.Configure<ReplicateSettings>(
     configuration.GetSection("AI:Replicate"));
 

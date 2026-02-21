@@ -258,54 +258,80 @@ await _emailService.SendVerificationEmailAsync(
     }
     
     public async Task<ApiResponse<bool>> ForgotPasswordAsync(ForgotPasswordDto dto)
+{
+    var user = await _unitOfWork.Users.GetByEmailAsync(dto.Email);
+    
+    if (user == null)
     {
-        var user = await _unitOfWork.Users.GetByEmailAsync(dto.Email);
-        
-        if (user == null)
-        {
-            // Don't reveal if email exists
-            return ApiResponse<bool>.SuccessResponse(true, 
-                "If the email exists, a password reset link has been sent.");
-        }
-        
-        // Generate reset token
-        user.PasswordResetToken = GenerateVerificationToken();
-        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
-        
-        await _unitOfWork.Users.UpdateAsync(user);
-        await _unitOfWork.SaveChangesAsync();
-        
-        // TODO: Send password reset email (Phase 8)
-        // await _emailService.SendPasswordResetEmailAsync(user.Email, user.PasswordResetToken);
-        
+        // Don't reveal if email exists (security best practice)
         return ApiResponse<bool>.SuccessResponse(true, 
             "If the email exists, a password reset link has been sent.");
     }
     
-    public async Task<ApiResponse<bool>> ResetPasswordAsync(ResetPasswordDto dto)
+    // Generate reset token
+    user.PasswordResetToken = GenerateVerificationToken();
+    user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
+    
+    await _unitOfWork.Users.UpdateAsync(user);
+    await _unitOfWork.SaveChangesAsync();
+    
+    // ✅ BUILD RESET LINK (adjust domain for production)
+    var resetLink =
+        $"https://tdm-web.vercel.app/verify?purpose=forgot_password&token={Uri.EscapeDataString(user.PasswordResetToken ?? string.Empty)}&email={Uri.EscapeDataString(user.Email)}";
+    
+    // ✅ SEND EMAIL
+    try
     {
-        if (dto.NewPassword != dto.ConfirmPassword)
-        {
-            return ApiResponse<bool>.ErrorResponse("Passwords do not match");
-        }
-        
-        var user = await _unitOfWork.Users.GetByPasswordResetTokenAsync(dto.Token);
-        
-        if (user == null)
-        {
-            return ApiResponse<bool>.ErrorResponse("Invalid or expired reset token");
-        }
-        
-        // Update password
-        user.PasswordHash = PasswordHasher.HashPassword(dto.NewPassword);
-        user.PasswordResetToken = null;
-        user.PasswordResetTokenExpiry = null;
-        
-        await _unitOfWork.Users.UpdateAsync(user);
-        await _unitOfWork.SaveChangesAsync();
-        
-        return ApiResponse<bool>.SuccessResponse(true, "Password reset successful");
+        await _emailService.SendPasswordResetEmailAsync(
+            user.Email,
+            user.FullName,
+            resetLink
+        );
     }
+    catch (Exception ex)
+    {
+        // Log error but still return success (don't reveal email existence)
+        Console.WriteLine($"Failed to send password reset email: {ex.Message}");
+    }
+    
+    return ApiResponse<bool>.SuccessResponse(true, 
+        "If the email exists, a password reset link has been sent.");
+}
+    
+    public async Task<ApiResponse<bool>> ResetPasswordAsync(ResetPasswordDto dto)
+{
+    if (dto.NewPassword != dto.ConfirmPassword)
+    {
+        return ApiResponse<bool>.ErrorResponse("Passwords do not match");
+    }
+    
+    var user = await _unitOfWork.Users.GetByPasswordResetTokenAsync(dto.Token);
+    
+    if (user == null)
+    {
+        return ApiResponse<bool>.ErrorResponse("Invalid or expired reset token");
+    }
+    
+    // Update password
+    user.PasswordHash = PasswordHasher.HashPassword(dto.NewPassword);
+    user.PasswordResetToken = null;
+    user.PasswordResetTokenExpiry = null;
+    
+    await _unitOfWork.Users.UpdateAsync(user);
+    await _unitOfWork.SaveChangesAsync();
+    
+    // ✅ Send confirmation email
+    try
+    {
+        await _emailService.SendPasswordResetConfirmationAsync(user.Email, user.FullName);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Failed to send confirmation email: {ex.Message}");
+    }
+    
+    return ApiResponse<bool>.SuccessResponse(true, "Password reset successful");
+}
     
     public async Task<ApiResponse<bool>> VerifyEmailAsync(string token)
     {
