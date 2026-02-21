@@ -29,6 +29,7 @@ namespace TBM.Infrastructure.Repositories.AI
         public Task<List<AIProject>> GetByUserAsync(Guid userId)
         {
             return _context.AIProjects
+                .Include(x => x.Designs)
                 .Where(x => x.UserId == userId)
                 .OrderByDescending(x => x.CreatedAt)
                 .ToListAsync();

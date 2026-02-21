@@ -42,5 +42,63 @@ namespace TBM.Infrastructure.Storage
 
             return result.SecureUrl.ToString();
         }
+
+        public async Task<string> UploadGeneratedMediaAsync(Stream stream, string fileName, string userId, string? contentType = null)
+        {
+            var folder = $"{_settings.GeneratedFolder}/{userId}";
+
+            if (IsVideoContent(fileName, contentType))
+            {
+                var videoUpload = new VideoUploadParams
+                {
+                    File = new FileDescription(fileName, stream),
+                    Folder = folder,
+                    UseFilename = true,
+                    UniqueFilename = true,
+                    Overwrite = false
+                };
+
+                var videoResult = await _cloudinary.UploadAsync(videoUpload);
+                if (videoResult.Error != null)
+                {
+                    throw new Exception(videoResult.Error.Message);
+                }
+
+                return videoResult.SecureUrl.ToString();
+            }
+
+            var imageUpload = new ImageUploadParams
+            {
+                File = new FileDescription(fileName, stream),
+                Folder = folder,
+                UseFilename = true,
+                UniqueFilename = true,
+                Overwrite = false
+            };
+
+            var imageResult = await _cloudinary.UploadAsync(imageUpload);
+            if (imageResult.Error != null)
+            {
+                throw new Exception(imageResult.Error.Message);
+            }
+
+            return imageResult.SecureUrl.ToString();
+        }
+
+        private static bool IsVideoContent(string fileName, string? contentType)
+        {
+            if (!string.IsNullOrWhiteSpace(contentType) &&
+                contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var extension = Path.GetExtension(fileName);
+            return extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
+                   extension.Equals(".mov", StringComparison.OrdinalIgnoreCase) ||
+                   extension.Equals(".webm", StringComparison.OrdinalIgnoreCase) ||
+                   extension.Equals(".avi", StringComparison.OrdinalIgnoreCase) ||
+                   extension.Equals(".mkv", StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

@@ -17,7 +17,14 @@ public static class ServiceExtensions
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<ICartService, CartService>();
         services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<IPromoService, PromoService>();
+        services.AddScoped<ICheckoutService, CheckoutService>();
         services.AddScoped<ImageUploadService>();
+        services.AddScoped<UserDataStoreService>();
+        services.AddScoped<AIGeneratedMediaService>();
+        services.AddScoped<AIUsageService>();
+        services.AddScoped<AICreditService>();
+        services.AddScoped<VendorDomainService>();
 
         
         return services;

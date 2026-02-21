@@ -34,6 +34,198 @@ public class ProductsController : ControllerBase
         
         return Ok(result);
     }
+
+    /// <summary>
+    /// Compatibility endpoint for frontend local route: /api/flooring
+    /// </summary>
+    [HttpGet("~/api/flooring")]
+    public async Task<IActionResult> GetFlooring(
+        [FromQuery] string? category = null,
+        [FromQuery] string? materialType = null,
+        [FromQuery] decimal? minPrice = null,
+        [FromQuery] decimal? maxPrice = null,
+        [FromQuery] string? sort = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int limit = 12)
+    {
+        var searchParts = new[] { category, materialType }
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!.Trim())
+            .ToList();
+
+        var filter = new ProductFilterDto
+        {
+            PageNumber = page < 1 ? 1 : page,
+            PageSize = limit < 1 ? 12 : limit,
+            SearchTerm = searchParts.Count > 0 ? string.Join(" ", searchParts) : null,
+            ActiveOnly = true
+        };
+
+        var result = await _productService.GetProductsAsync(filter);
+
+        if (!result.Success || result.Data == null)
+        {
+            return BadRequest(result);
+        }
+
+        var products = result.Data.Items;
+
+        if (minPrice.HasValue)
+        {
+            products = products
+                .Where(p => p.Price.HasValue && p.Price.Value >= minPrice.Value)
+                .ToList();
+        }
+
+        if (maxPrice.HasValue)
+        {
+            products = products
+                .Where(p => p.Price.HasValue && p.Price.Value <= maxPrice.Value)
+                .ToList();
+        }
+
+        products = sort?.Trim().ToLowerInvariant() switch
+        {
+            "price_asc" => products.OrderBy(p => p.Price ?? decimal.MaxValue).ToList(),
+            "price_desc" => products.OrderByDescending(p => p.Price ?? decimal.MinValue).ToList(),
+            "newest" => products.OrderByDescending(p => p.CreatedAt).ToList(),
+            _ => products
+        };
+
+        var total = result.Data.TotalCount;
+        var totalPages = (int)Math.Ceiling(total / (double)Math.Max(1, result.Data.PageSize));
+
+        return Ok(new
+        {
+            products,
+            pagination = new
+            {
+                page = result.Data.PageNumber,
+                limit = result.Data.PageSize,
+                total,
+                totalPages,
+                hasMore = result.Data.PageNumber < totalPages
+            },
+            filters = new
+            {
+                category,
+                materialType,
+                minPrice,
+                maxPrice,
+                sort
+            }
+        });
+    }
+
+    /// <summary>
+    /// Compatibility endpoint for frontend route: /materials
+    /// </summary>
+    [HttpGet("~/materials")]
+    public async Task<IActionResult> GetMaterials(
+        [FromQuery] string? category = null,
+        [FromQuery] string? materialType = null,
+        [FromQuery] decimal? minPrice = null,
+        [FromQuery] decimal? maxPrice = null,
+        [FromQuery] string? sort = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int limit = 12)
+    {
+        var searchParts = new[] { category, materialType }
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!.Trim())
+            .ToList();
+
+        var filter = new ProductFilterDto
+        {
+            PageNumber = page < 1 ? 1 : page,
+            PageSize = limit < 1 ? 12 : limit,
+            SearchTerm = searchParts.Count > 0 ? string.Join(" ", searchParts) : null,
+            ActiveOnly = true
+        };
+
+        var result = await _productService.GetProductsAsync(filter);
+
+        if (!result.Success || result.Data == null)
+        {
+            return BadRequest(new { success = false, message = result.Message });
+        }
+
+        var products = result.Data.Items;
+
+        if (minPrice.HasValue)
+        {
+            products = products
+                .Where(p => p.Price.HasValue && p.Price.Value >= minPrice.Value)
+                .ToList();
+        }
+
+        if (maxPrice.HasValue)
+        {
+            products = products
+                .Where(p => p.Price.HasValue && p.Price.Value <= maxPrice.Value)
+                .ToList();
+        }
+
+        products = sort?.Trim().ToLowerInvariant() switch
+        {
+            "price_asc" => products.OrderBy(p => p.Price ?? decimal.MaxValue).ToList(),
+            "price_desc" => products.OrderByDescending(p => p.Price ?? decimal.MinValue).ToList(),
+            "newest" => products.OrderByDescending(p => p.CreatedAt).ToList(),
+            _ => products
+        };
+
+        var total = result.Data.TotalCount;
+        var totalPages = (int)Math.Ceiling(total / (double)Math.Max(1, result.Data.PageSize));
+
+        return Ok(new
+        {
+            materials = products.Select(MapMaterial).ToList(),
+            pagination = new
+            {
+                page = result.Data.PageNumber,
+                limit = result.Data.PageSize,
+                total,
+                totalPages,
+                hasMore = result.Data.PageNumber < totalPages
+            },
+            filters = new
+            {
+                category,
+                materialType,
+                minPrice,
+                maxPrice,
+                sort
+            }
+        });
+    }
+
+    /// <summary>
+    /// Compatibility endpoint for frontend route: /materials/:id
+    /// </summary>
+    [HttpGet("~/materials/{id}")]
+    public async Task<IActionResult> GetMaterialById(string id)
+    {
+        if (Guid.TryParse(id, out var productId))
+        {
+            var byIdResult = await _productService.GetProductByIdAsync(productId);
+
+            if (!byIdResult.Success || byIdResult.Data == null)
+            {
+                return NotFound(new { success = false, message = byIdResult.Message });
+            }
+
+            return Ok(new { material = MapMaterial(byIdResult.Data) });
+        }
+
+        var bySlugResult = await _productService.GetProductBySlugAsync(id);
+
+        if (!bySlugResult.Success || bySlugResult.Data == null)
+        {
+            return NotFound(new { success = false, message = bySlugResult.Message });
+        }
+
+        return Ok(new { material = MapMaterial(bySlugResult.Data) });
+    }
     
     /// <summary>
     /// Get featured products
@@ -199,5 +391,20 @@ public class ProductsController : ControllerBase
         }
         
         return Ok(result);
+    }
+
+    private static object MapMaterial(ProductDto product)
+    {
+        return new
+        {
+            id = product.Id,
+            name = product.Name,
+            slug = product.Slug,
+            description = product.ShortDescription,
+            price = product.Price,
+            image = product.PrimaryImageUrl,
+            category = product.CategoryName,
+            inStock = product.InStock
+        };
     }
 }

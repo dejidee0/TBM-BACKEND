@@ -160,7 +160,8 @@ namespace TBM.Infrastructure.AI
                 Success = true,
                 OutputUrl = outputUrl,
                 Cost = 0.05m,
-                RawResponse = rawResponse
+                RawResponse = rawResponse,
+                ProviderJobId = predictionId
             };
         }
 
@@ -175,6 +176,7 @@ namespace TBM.Infrastructure.AI
                 OutputUrl = string.Empty,
                 Cost = 0m,
                 RawResponse = rawResponse,
+                ProviderJobId = predictionId,
                 ErrorMessage = error
             };
         }

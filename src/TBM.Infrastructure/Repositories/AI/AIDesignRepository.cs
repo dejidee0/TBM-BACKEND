@@ -19,6 +19,13 @@ namespace TBM.Infrastructure.Repositories.AI
             await _context.AIDesigns.AddAsync(design);
         }
 
+        public Task<AIDesign?> GetByIdAsync(Guid id)
+        {
+            return _context.AIDesigns
+                .Include(x => x.AIProject)
+                .FirstOrDefaultAsync(x => x.Id == id);
+        }
+
         public Task<List<AIDesign>> GetByProjectAsync(Guid projectId)
         {
             return _context.AIDesigns

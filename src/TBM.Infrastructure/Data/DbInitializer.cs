@@ -20,6 +20,16 @@ public static class DbInitializer
                 },
                 new()
                 {
+                    Name = UserRoles.Vendor,
+                    Description = "Vendor with isolated catalog and fulfillment scope"
+                },
+                new()
+                {
+                    Name = UserRoles.Admin,
+                    Description = "Administrator with operational access"
+                },
+                new()
+                {
                     Name = UserRoles.SuperAdmin,
                     Description = "Super administrator with full system access"
                 }
@@ -27,6 +37,28 @@ public static class DbInitializer
             
             await context.Roles.AddRangeAsync(roles);
             await context.SaveChangesAsync();
+        }
+        else
+        {
+            var requiredRoles = new[]
+            {
+                new { Name = UserRoles.Customer, Description = "Regular customer with access to shop and purchase" },
+                new { Name = UserRoles.Vendor, Description = "Vendor with isolated catalog and fulfillment scope" },
+                new { Name = UserRoles.Admin, Description = "Administrator with operational access" },
+                new { Name = UserRoles.SuperAdmin, Description = "Super administrator with full system access" }
+            };
+
+            var existingRoleNames = context.Roles.Select(r => r.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var missingRoles = requiredRoles
+                .Where(r => !existingRoleNames.Contains(r.Name))
+                .Select(r => new Role { Name = r.Name, Description = r.Description })
+                .ToList();
+
+            if (missingRoles.Any())
+            {
+                await context.Roles.AddRangeAsync(missingRoles);
+                await context.SaveChangesAsync();
+            }
         }
         
         // Seed Categories if they don't exist

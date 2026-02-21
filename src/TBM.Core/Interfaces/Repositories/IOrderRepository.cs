@@ -8,6 +8,7 @@ public interface IOrderRepository
 {
     Task<Order?> GetByIdAsync(Guid id);
     Task<Order?> GetByOrderNumberAsync(string orderNumber);
+    Task<Order?> GetByPaymentReferenceAsync(string paymentReference, Guid? userId = null);
     Task<List<MonthlyRevenueDto>> GetMonthlyRevenueAsync(int months);
 Task<List<PaymentDistributionDto>> GetPaymentDistributionAsync();
 
