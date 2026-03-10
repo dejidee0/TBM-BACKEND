@@ -20,8 +20,8 @@ public class CheckoutController : ControllerBase
         _checkoutService = checkoutService;
     }
 
+    
     [HttpGet]
-    [HttpGet("~/api/checkout")]
     public async Task<IActionResult> GetCheckout([FromQuery] string? promoCode = null)
     {
         var userId = GetUserId();
@@ -50,8 +50,8 @@ public class CheckoutController : ControllerBase
         });
     }
 
+    
     [HttpPost("validate-promo")]
-    [HttpPost("~/api/checkout/validate-promo")]
     public async Task<IActionResult> ValidatePromo([FromBody] PromoValidationRequestDto dto)
     {
         var userId = GetUserId();
@@ -77,8 +77,8 @@ public class CheckoutController : ControllerBase
         });
     }
 
+   
     [HttpPost("payment")]
-    [HttpPost("~/api/checkout/payment")]
     public async Task<IActionResult> ProcessPayment([FromBody] CheckoutPaymentRequestDto dto)
     {
         var userId = GetUserId();
@@ -102,7 +102,42 @@ public class CheckoutController : ControllerBase
             orderId = result.Data.OrderId,
             orderNumber = result.Data.OrderNumber,
             message = result.Data.Message,
-            idempotent = result.Data.IsIdempotent
+            idempotent = result.Data.IsIdempotent,
+            paymentProvider = result.Data.PaymentProvider,
+            paymentReference = result.Data.PaymentReference,
+            paymentStatus = result.Data.PaymentStatus,
+            authorizationUrl = result.Data.AuthorizationUrl,
+            accessCode = result.Data.AccessCode,
+            publicKey = result.Data.PublicKey
+        });
+    }
+
+    [HttpGet("payment/paystack/verify/{reference}")]
+    public async Task<IActionResult> VerifyPaystackPayment([FromRoute] string reference)
+    {
+        var userId = GetUserId();
+        var result = await _checkoutService.VerifyPaystackPaymentAsync(userId, reference);
+
+        if (!result.Success || result.Data == null)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = result.Message
+            });
+        }
+
+        return Ok(new
+        {
+            success = true,
+            orderId = result.Data.OrderId,
+            orderNumber = result.Data.OrderNumber,
+            message = result.Data.Message,
+            idempotent = result.Data.IsIdempotent,
+            paymentProvider = result.Data.PaymentProvider,
+            paymentReference = result.Data.PaymentReference,
+            paymentStatus = result.Data.PaymentStatus,
+            publicKey = result.Data.PublicKey
         });
     }
 

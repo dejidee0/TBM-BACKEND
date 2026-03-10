@@ -38,6 +38,35 @@ public async Task<int> GetOrderCountAsync(DateTime from, DateTime to)
         .CountAsync();
 }
 
+public async Task<List<RevenueByServiceDto>> GetRevenueByServiceAsync(DateTime? fromDate = null, DateTime? toDate = null)
+{
+    var query = _context.OrderItems
+        .Where(i =>
+            (i.Order.PaymentStatus == PaymentStatus.Paid || i.Order.Status == OrderStatus.Completed) &&
+            !i.Order.IsDeleted);
+
+    if (fromDate.HasValue)
+    {
+        query = query.Where(i => i.Order.CreatedAt >= fromDate.Value);
+    }
+
+    if (toDate.HasValue)
+    {
+        query = query.Where(i => i.Order.CreatedAt <= toDate.Value);
+    }
+
+    return await query
+        .GroupBy(i => i.Product.ProductType)
+        .Select(g => new RevenueByServiceDto
+        {
+            Service = g.Key.ToString(),
+            Revenue = g.Sum(x => x.SubTotal),
+            Orders = g.Select(x => x.OrderId).Distinct().Count()
+        })
+        .OrderByDescending(x => x.Revenue)
+        .ToListAsync();
+}
+
 public async Task<List<MonthlyRevenueDto>> GetMonthlyRevenueAsync(int months)
 {
     var startDate = DateTime.UtcNow.AddMonths(-months);
@@ -249,5 +278,41 @@ public async Task<List<PaymentDistributionDto>> GetPaymentDistributionAsync()
         }
         
         return await query.CountAsync();
+    }
+
+    public async Task<int> GetCountByPaymentStatusAsync(PaymentStatus paymentStatus, DateTime? fromDate = null, DateTime? toDate = null)
+    {
+        var query = _context.Orders
+            .Where(o => o.PaymentStatus == paymentStatus);
+
+        if (fromDate.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt >= fromDate.Value);
+        }
+
+        if (toDate.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt <= toDate.Value);
+        }
+
+        return await query.CountAsync();
+    }
+
+    public async Task<decimal> GetRevenueByPaymentStatusAsync(PaymentStatus paymentStatus, DateTime? fromDate = null, DateTime? toDate = null)
+    {
+        var query = _context.Orders
+            .Where(o => o.PaymentStatus == paymentStatus);
+
+        if (fromDate.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt >= fromDate.Value);
+        }
+
+        if (toDate.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt <= toDate.Value);
+        }
+
+        return await query.SumAsync(o => (decimal?)o.Total) ?? 0m;
     }
 }

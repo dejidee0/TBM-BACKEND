@@ -11,4 +11,5 @@ public interface ICheckoutService
         Guid userId,
         CheckoutPaymentRequestDto dto,
         string? idempotencyKey = null);
+    Task<ApiResponse<CheckoutPaymentResultDto>> VerifyPaystackPaymentAsync(Guid userId, string reference);
 }

@@ -26,8 +26,13 @@ public class AIDesignConfiguration : IEntityTypeConfiguration<AIDesign>
             .HasMaxLength(200);
 
         builder.Property(x => x.DurationSeconds);
+        builder.Property(x => x.IsPublic)
+            .HasDefaultValue(false);
+        builder.Property(x => x.PublishedAt);
 
         builder.Property(x => x.Width);
         builder.Property(x => x.Height);
+
+        builder.HasIndex(x => new { x.IsPublic, x.CreatedAt });
     }
 }

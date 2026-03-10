@@ -51,6 +51,7 @@ public static class ServiceExtensions
         services.AddScoped<IOrderStatusHistoryRepository, OrderStatusHistoryRepository>();
         services.AddScoped<ICartRepository, CartRepository>();
         services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<IContactMessageRepository, ContactMessageRepository>();
         services.AddScoped<ISettingRepository, SettingRepository>();
         services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
 
@@ -63,6 +64,8 @@ public static class ServiceExtensions
 services.AddScoped<IAIProjectRepository, AIProjectRepository>();
 services.AddScoped<IAIDesignRepository, AIDesignRepository>();
 services.AddScoped<IAIUsageRepository, AIUsageRepository>();
+services.AddScoped<IAIRenovationEstimateRepository, AIRenovationEstimateRepository>();
+services.AddScoped<IAIAssistantRepository, AIAssistantRepository>();
 
 // Cloudinary
 services.Configure<CloudinarySettings>(configuration.GetSection("Cloudinary"));

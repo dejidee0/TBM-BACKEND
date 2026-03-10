@@ -10,7 +10,7 @@ using TBM.Application.Interfaces;
 namespace TBM.API.Controllers.V1;
 
 [ApiController]
-[Route("api/v1/[controller]")]
+[Route("api/v1/orders")]
 [EnableRateLimiting("DynamicPolicy")]
 
 [Authorize]
@@ -43,43 +43,41 @@ public class OrdersController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/orders/:orderId
     /// </summary>
+    [ApiExplorerSettings(IgnoreApi = true)]
     [HttpGet("~/api/orders/{orderId:guid}")]
     public async Task<IActionResult> GetOrderCompatibility(Guid orderId)
     {
+        AddCompatibilityDeprecationHeaders();
+
         var userId = GetUserId();
         var result = await _orderService.GetOrderByIdAsync(orderId, userId);
 
-        if (!result.Success || result.Data == null)
+        if (!result.Success)
         {
-            return NotFound(new { success = false, message = result.Message });
+            return NotFound(result);
         }
 
-        return Ok(result.Data);
+        return Ok(result);
     }
 
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/orders
     /// </summary>
+    [ApiExplorerSettings(IgnoreApi = true)]
     [HttpGet("~/api/orders")]
     public async Task<IActionResult> GetMyOrdersCompatibility()
     {
+        AddCompatibilityDeprecationHeaders();
+
         var userId = GetUserId();
         var result = await _orderService.GetUserOrdersAsync(userId);
 
-        if (!result.Success || result.Data == null)
+        if (!result.Success)
         {
-            return BadRequest(new { success = false, message = result.Message });
+            return BadRequest(result);
         }
 
-        return Ok(result.Data.Select(o => new
-        {
-            id = o.Id,
-            orderNumber = o.OrderNumber,
-            status = o.StatusName,
-            paymentStatus = o.PaymentStatusName,
-            total = o.Total,
-            createdAt = o.CreatedAt
-        }));
+        return Ok(result);
     }
     
     /// <summary>
@@ -103,7 +101,6 @@ public class OrdersController : ControllerBase
     /// Get invoice URL for a user order
     /// </summary>
     [HttpGet("{orderId:guid}/invoice")]
-    [HttpGet("~/api/orders/{orderId:guid}/invoice")]
     public async Task<IActionResult> GetOrderInvoice(Guid orderId)
     {
         var userId = GetUserId();
@@ -130,6 +127,16 @@ public class OrdersController : ControllerBase
             success = true,
             url = invoiceUrl
         });
+    }
+
+    /// <summary>
+    /// Compatibility endpoint for frontend route: /api/orders/:orderId/invoice
+    /// </summary>
+    [ApiExplorerSettings(IgnoreApi = true)]
+    [HttpGet("~/api/orders/{orderId:guid}/invoice")]
+    public Task<IActionResult> GetOrderInvoiceCompatibility(Guid orderId)
+    {
+        return GetOrderInvoice(orderId);
     }
 
     /// <summary>
@@ -247,6 +254,7 @@ public class OrdersController : ControllerBase
     /// <summary>
     /// Get all orders with filters (Admin only)
     /// </summary>
+    [ApiExplorerSettings(IgnoreApi = true)]
     [Authorize(Roles = "SuperAdmin")]
     [HttpGet]
     public async Task<IActionResult> GetAllOrders([FromQuery] OrderFilterDto filter)
@@ -264,6 +272,7 @@ public class OrdersController : ControllerBase
     /// <summary>
     /// Get order by ID (Admin - any order)
     /// </summary>
+    [ApiExplorerSettings(IgnoreApi = true)]
     [Authorize(Roles = "SuperAdmin")]
     [HttpGet("admin/{orderId}")]
     public async Task<IActionResult> GetOrderAdmin(Guid orderId)
@@ -281,6 +290,7 @@ public class OrdersController : ControllerBase
     /// <summary>
     /// Update order status (Admin only)
     /// </summary>
+    [ApiExplorerSettings(IgnoreApi = true)]
     [Authorize(Roles = "SuperAdmin")]
     [HttpPut("{orderId}/status")]
     public async Task<IActionResult> UpdateOrderStatus(Guid orderId, [FromBody] UpdateOrderStatusDto dto)
@@ -298,6 +308,7 @@ public class OrdersController : ControllerBase
     /// <summary>
     /// Update payment status (Admin only)
     /// </summary>
+    [ApiExplorerSettings(IgnoreApi = true)]
     [Authorize(Roles = "SuperAdmin")]
     [HttpPut("{orderId}/payment")]
     public async Task<IActionResult> UpdatePaymentStatus(Guid orderId, [FromBody] UpdatePaymentStatusDto dto)
@@ -322,5 +333,11 @@ public class OrdersController : ControllerBase
         }
         
         return userId;
+    }
+
+    private void AddCompatibilityDeprecationHeaders()
+    {
+        Response.Headers["Deprecation"] = "true";
+        Response.Headers["Sunset"] = "Tue, 30 Jun 2026 23:59:59 GMT";
     }
 }

@@ -168,8 +168,11 @@ public class ProductService : IProductService
         {
             return ApiResponse<ProductDto>.ErrorResponse("Product not found");
         }
+
+        var dto = MapProductToDto(product);
+        dto.SimilarProducts = await BuildSimilarProductsAsync(product.Id);
         
-        return ApiResponse<ProductDto>.SuccessResponse(MapProductToDto(product));
+        return ApiResponse<ProductDto>.SuccessResponse(dto);
     }
     
     public async Task<ApiResponse<ProductDto>> GetProductBySlugAsync(string slug)
@@ -180,8 +183,11 @@ public class ProductService : IProductService
         {
             return ApiResponse<ProductDto>.ErrorResponse("Product not found");
         }
+
+        var dto = MapProductToDto(product);
+        dto.SimilarProducts = await BuildSimilarProductsAsync(product.Id);
         
-        return ApiResponse<ProductDto>.SuccessResponse(MapProductToDto(product));
+        return ApiResponse<ProductDto>.SuccessResponse(dto);
     }
     
     public async Task<ApiResponse<PagedResultDto<ProductDto>>> GetProductsAsync(ProductFilterDto filter)
@@ -193,6 +199,8 @@ public class ProductService : IProductService
             filter.ProductType.HasValue ? (ProductType)filter.ProductType.Value : null,
             filter.CategoryId,
             filter.SearchTerm,
+            filter.MinPrice,
+            filter.MaxPrice,
             filter.IsFeatured,
             filter.ActiveOnly
         );
@@ -510,6 +518,35 @@ public class ProductService : IProductService
             AltText = image.AltText,
             DisplayOrder = image.DisplayOrder,
             IsPrimary = image.IsPrimary
+        };
+    }
+
+    private async Task<List<ProductCardDto>> BuildSimilarProductsAsync(Guid productId)
+    {
+        const int defaultLimit = 4;
+        const int maxLimit = 12;
+
+        var safeLimit = Math.Clamp(defaultLimit, 1, maxLimit);
+        var related = await _unitOfWork.Products.GetRelatedAsync(productId, safeLimit);
+
+        return related
+            .Select(MapProductToCardDto)
+            .ToList();
+    }
+
+    private ProductCardDto MapProductToCardDto(Product product)
+    {
+        var primaryImage = product.Images.FirstOrDefault(i => i.IsPrimary) ?? product.Images.FirstOrDefault();
+
+        return new ProductCardDto
+        {
+            Id = product.Id,
+            Name = product.Name,
+            Slug = product.Slug,
+            Price = product.Price,
+            Image = primaryImage?.ImageUrl,
+            Category = product.Category?.Name ?? string.Empty,
+            InStock = !product.TrackInventory || (product.StockQuantity ?? 0) > 0
         };
     }
     

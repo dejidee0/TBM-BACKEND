@@ -36,6 +36,22 @@ public class ProductsController : ControllerBase
     }
 
     /// <summary>
+    /// Alias for materials listing using canonical product filters
+    /// </summary>
+    [HttpGet("~/api/v1/materials")]
+    public async Task<IActionResult> GetMaterialsV1([FromQuery] ProductFilterDto filter)
+    {
+        var result = await _productService.GetProductsAsync(filter);
+
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Compatibility endpoint for frontend local route: /api/flooring
     /// </summary>
     [HttpGet("~/api/flooring")]
@@ -44,6 +60,7 @@ public class ProductsController : ControllerBase
         [FromQuery] string? materialType = null,
         [FromQuery] decimal? minPrice = null,
         [FromQuery] decimal? maxPrice = null,
+        [FromQuery] bool? isFeatured = null,
         [FromQuery] string? sort = null,
         [FromQuery] int page = 1,
         [FromQuery] int limit = 12)
@@ -58,6 +75,9 @@ public class ProductsController : ControllerBase
             PageNumber = page < 1 ? 1 : page,
             PageSize = limit < 1 ? 12 : limit,
             SearchTerm = searchParts.Count > 0 ? string.Join(" ", searchParts) : null,
+            MinPrice = minPrice,
+            MaxPrice = maxPrice,
+            IsFeatured = isFeatured,
             ActiveOnly = true
         };
 
@@ -69,20 +89,6 @@ public class ProductsController : ControllerBase
         }
 
         var products = result.Data.Items;
-
-        if (minPrice.HasValue)
-        {
-            products = products
-                .Where(p => p.Price.HasValue && p.Price.Value >= minPrice.Value)
-                .ToList();
-        }
-
-        if (maxPrice.HasValue)
-        {
-            products = products
-                .Where(p => p.Price.HasValue && p.Price.Value <= maxPrice.Value)
-                .ToList();
-        }
 
         products = sort?.Trim().ToLowerInvariant() switch
         {
@@ -112,6 +118,7 @@ public class ProductsController : ControllerBase
                 materialType,
                 minPrice,
                 maxPrice,
+                isFeatured,
                 sort
             }
         });
@@ -126,6 +133,7 @@ public class ProductsController : ControllerBase
         [FromQuery] string? materialType = null,
         [FromQuery] decimal? minPrice = null,
         [FromQuery] decimal? maxPrice = null,
+        [FromQuery] bool? isFeatured = null,
         [FromQuery] string? sort = null,
         [FromQuery] int page = 1,
         [FromQuery] int limit = 12)
@@ -140,6 +148,9 @@ public class ProductsController : ControllerBase
             PageNumber = page < 1 ? 1 : page,
             PageSize = limit < 1 ? 12 : limit,
             SearchTerm = searchParts.Count > 0 ? string.Join(" ", searchParts) : null,
+            MinPrice = minPrice,
+            MaxPrice = maxPrice,
+            IsFeatured = isFeatured,
             ActiveOnly = true
         };
 
@@ -151,20 +162,6 @@ public class ProductsController : ControllerBase
         }
 
         var products = result.Data.Items;
-
-        if (minPrice.HasValue)
-        {
-            products = products
-                .Where(p => p.Price.HasValue && p.Price.Value >= minPrice.Value)
-                .ToList();
-        }
-
-        if (maxPrice.HasValue)
-        {
-            products = products
-                .Where(p => p.Price.HasValue && p.Price.Value <= maxPrice.Value)
-                .ToList();
-        }
 
         products = sort?.Trim().ToLowerInvariant() switch
         {
@@ -194,6 +191,7 @@ public class ProductsController : ControllerBase
                 materialType,
                 minPrice,
                 maxPrice,
+                isFeatured,
                 sort
             }
         });
@@ -225,6 +223,32 @@ public class ProductsController : ControllerBase
         }
 
         return Ok(new { material = MapMaterial(bySlugResult.Data) });
+    }
+
+    /// <summary>
+    /// Alias for materials detail using slug or GUID
+    /// </summary>
+    [HttpGet("~/api/v1/materials/{idOrSlug}")]
+    public async Task<IActionResult> GetMaterialV1ByIdOrSlug(string idOrSlug)
+    {
+        if (Guid.TryParse(idOrSlug, out var productId))
+        {
+            var byIdResult = await _productService.GetProductByIdAsync(productId);
+            if (!byIdResult.Success)
+            {
+                return NotFound(byIdResult);
+            }
+
+            return Ok(byIdResult);
+        }
+
+        var bySlugResult = await _productService.GetProductBySlugAsync(idOrSlug);
+        if (!bySlugResult.Success)
+        {
+            return NotFound(bySlugResult);
+        }
+
+        return Ok(bySlugResult);
     }
     
     /// <summary>
@@ -404,7 +428,17 @@ public class ProductsController : ControllerBase
             price = product.Price,
             image = product.PrimaryImageUrl,
             category = product.CategoryName,
-            inStock = product.InStock
+            inStock = product.InStock,
+            similarProducts = product.SimilarProducts.Select(similar => new
+            {
+                id = similar.Id,
+                name = similar.Name,
+                slug = similar.Slug,
+                price = similar.Price,
+                image = similar.Image,
+                category = similar.Category,
+                inStock = similar.InStock
+            })
         };
     }
 }

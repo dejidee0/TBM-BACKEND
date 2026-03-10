@@ -1,7 +1,10 @@
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using TBM.Application.DTOs.Checkout;
 using TBM.Application.DTOs.Common;
 using TBM.Application.DTOs.Orders;
 using TBM.Application.Interfaces;
+using TBM.Core.Entities.Payments;
 using TBM.Core.Entities.Users;
 using TBM.Core.Enums;
 using TBM.Core.Interfaces;
@@ -14,22 +17,29 @@ public class CheckoutService : ICheckoutService
     private const decimal FreeShippingThreshold = 500000m;
     private const decimal TaxRate = 0.075m;
     private const decimal AmountTolerance = 1.00m;
+    private const string PaystackInitializationEventType = "transaction.initialize";
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly IOrderService _orderService;
     private readonly IPromoService _promoService;
     private readonly AuditService _auditService;
+    private readonly PaystackService _paystackService;
+    private readonly ILogger<CheckoutService> _logger;
 
     public CheckoutService(
         IUnitOfWork unitOfWork,
         IOrderService orderService,
         IPromoService promoService,
-        AuditService auditService)
+        AuditService auditService,
+        PaystackService paystackService,
+        ILogger<CheckoutService> logger)
     {
         _unitOfWork = unitOfWork;
         _orderService = orderService;
         _promoService = promoService;
         _auditService = auditService;
+        _paystackService = paystackService;
+        _logger = logger;
     }
 
     public async Task<ApiResponse<CheckoutSummaryDto>> GetCheckoutSummaryAsync(Guid userId, string? promoCode = null)
@@ -119,13 +129,8 @@ public class CheckoutService : ICheckoutService
         CheckoutPaymentRequestDto dto,
         string? idempotencyKey = null)
     {
-        var effectiveIdempotencyKey = ResolveIdempotencyKey(idempotencyKey, dto);
-        if (string.IsNullOrWhiteSpace(effectiveIdempotencyKey))
-        {
-            return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse(
-                "Idempotency key is required. Provide Idempotency-Key header or payment reference.");
-        }
-
+        var paymentMethod = ParsePaymentMethod(dto.Payment.Method) ?? PaymentMethod.Paystack;
+        var effectiveIdempotencyKey = ResolveIdempotencyKey(idempotencyKey, dto) ?? GeneratePaymentReference();
         effectiveIdempotencyKey = effectiveIdempotencyKey.Trim();
 
         var existingOrder = await _unitOfWork.Orders.GetByPaymentReferenceAsync(effectiveIdempotencyKey, userId);
@@ -135,6 +140,11 @@ public class CheckoutService : ICheckoutService
             {
                 return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse(
                     "Idempotency key was already used with a different payment amount.");
+            }
+
+            if (paymentMethod == PaymentMethod.Paystack)
+            {
+                return await HandleExistingPaystackOrderAsync(existingOrder, userId, effectiveIdempotencyKey, dto.Payment.CallbackUrl);
             }
 
             await _auditService.LogAsync(
@@ -155,7 +165,10 @@ public class CheckoutService : ICheckoutService
                     OrderId = existingOrder.Id,
                     OrderNumber = existingOrder.OrderNumber,
                     Message = "Order already exists for this payment request.",
-                    IsIdempotent = true
+                    IsIdempotent = true,
+                    PaymentProvider = existingOrder.PaymentMethod?.ToString(),
+                    PaymentReference = existingOrder.PaymentReference,
+                    PaymentStatus = existingOrder.PaymentStatus.ToString()
                 });
         }
 
@@ -206,12 +219,7 @@ public class CheckoutService : ICheckoutService
         }
 
         order.PaymentReference = effectiveIdempotencyKey;
-
-        var paymentMethod = ParsePaymentMethod(dto.Payment.Method);
-        if (paymentMethod.HasValue)
-        {
-            order.PaymentMethod = paymentMethod.Value;
-        }
+        order.PaymentMethod = paymentMethod;
 
         await _unitOfWork.Orders.UpdateAsync(order);
         await _unitOfWork.SaveChangesAsync();
@@ -230,6 +238,19 @@ public class CheckoutService : ICheckoutService
                 paymentMethod = order.PaymentMethod?.ToString()
             });
 
+        if (paymentMethod == PaymentMethod.Paystack)
+        {
+            var initResult = await InitializePaystackForOrderAsync(order, userId, effectiveIdempotencyKey, dto.Payment.CallbackUrl);
+            if (!initResult.Success)
+            {
+                return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse(initResult.Message);
+            }
+
+            return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
+                BuildPaystackResult(order, initResult, isIdempotent: false),
+                "Paystack payment initialized successfully.");
+        }
+
         return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
             new CheckoutPaymentResultDto
             {
@@ -237,9 +258,333 @@ public class CheckoutService : ICheckoutService
                 OrderId = order.Id,
                 OrderNumber = order.OrderNumber,
                 Message = "Checkout payment request accepted.",
-                IsIdempotent = false
+                IsIdempotent = false,
+                PaymentProvider = paymentMethod.ToString(),
+                PaymentReference = order.PaymentReference,
+                PaymentStatus = order.PaymentStatus.ToString()
             },
             "Checkout payment completed successfully");
+    }
+
+    public async Task<ApiResponse<CheckoutPaymentResultDto>> VerifyPaystackPaymentAsync(Guid userId, string reference)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+        {
+            return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse("Payment reference is required.");
+        }
+
+        reference = reference.Trim();
+
+        var order = await _unitOfWork.Orders.GetByPaymentReferenceAsync(reference, userId);
+        if (order == null)
+        {
+            return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse("Order not found for this payment reference.");
+        }
+
+        if (order.PaymentStatus == PaymentStatus.Paid)
+        {
+            return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
+                new CheckoutPaymentResultDto
+                {
+                    Success = true,
+                    OrderId = order.Id,
+                    OrderNumber = order.OrderNumber,
+                    Message = "Payment already verified.",
+                    IsIdempotent = true,
+                    PaymentProvider = PaymentMethod.Paystack.ToString(),
+                    PaymentReference = order.PaymentReference,
+                    PaymentStatus = order.PaymentStatus.ToString(),
+                    PublicKey = _paystackService.GetPublicKey()
+                });
+        }
+
+        var verificationResult = await _paystackService.VerifyTransactionAsync(reference);
+        if (!verificationResult.Success)
+        {
+            return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse(verificationResult.Message);
+        }
+
+        ApplyVerificationResultToOrder(order, verificationResult);
+
+        await _unitOfWork.Orders.UpdateAsync(order);
+        await _unitOfWork.SaveChangesAsync();
+
+        await _auditService.LogAsync(
+            action: "Checkout.Payment.Verified",
+            category: "Commerce",
+            oldValue: null,
+            newValue: new
+            {
+                userId,
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                paymentReference = reference,
+                paymentStatus = order.PaymentStatus.ToString(),
+                gatewayStatus = verificationResult.Status
+            });
+
+        return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
+            new CheckoutPaymentResultDto
+            {
+                Success = order.PaymentStatus == PaymentStatus.Paid,
+                OrderId = order.Id,
+                OrderNumber = order.OrderNumber,
+                Message = verificationResult.Message,
+                IsIdempotent = false,
+                PaymentProvider = PaymentMethod.Paystack.ToString(),
+                PaymentReference = order.PaymentReference,
+                PaymentStatus = order.PaymentStatus.ToString(),
+                PublicKey = _paystackService.GetPublicKey()
+            });
+    }
+
+    private async Task<ApiResponse<CheckoutPaymentResultDto>> HandleExistingPaystackOrderAsync(
+        TBM.Core.Entities.Orders.Order order,
+        Guid userId,
+        string reference,
+        string? callbackUrl)
+    {
+        if (order.PaymentStatus == PaymentStatus.Paid)
+        {
+            return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
+                new CheckoutPaymentResultDto
+                {
+                    Success = true,
+                    OrderId = order.Id,
+                    OrderNumber = order.OrderNumber,
+                    Message = "Order already paid.",
+                    IsIdempotent = true,
+                    PaymentProvider = PaymentMethod.Paystack.ToString(),
+                    PaymentReference = order.PaymentReference,
+                    PaymentStatus = order.PaymentStatus.ToString(),
+                    PublicKey = _paystackService.GetPublicKey()
+                });
+        }
+
+        var initializeEvent = await _unitOfWork.WebhookEvents
+            .GetByReferenceAndEventTypeAsync(reference, PaystackInitializationEventType);
+
+        if (initializeEvent != null &&
+            TryReadInitializationSnapshot(initializeEvent.Payload, out var snapshot) &&
+            !string.IsNullOrWhiteSpace(snapshot.AuthorizationUrl))
+        {
+            return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
+                new CheckoutPaymentResultDto
+                {
+                    Success = true,
+                    OrderId = order.Id,
+                    OrderNumber = order.OrderNumber,
+                    Message = "Order already exists for this payment request.",
+                    IsIdempotent = true,
+                    PaymentProvider = PaymentMethod.Paystack.ToString(),
+                    PaymentReference = snapshot.Reference,
+                    PaymentStatus = order.PaymentStatus.ToString(),
+                    AuthorizationUrl = snapshot.AuthorizationUrl,
+                    AccessCode = snapshot.AccessCode,
+                    PublicKey = snapshot.PublicKey
+                });
+        }
+
+        var verifyResult = await _paystackService.VerifyTransactionAsync(reference);
+        if (verifyResult.Success && verifyResult.Status.Equals("success", StringComparison.OrdinalIgnoreCase))
+        {
+            ApplyVerificationResultToOrder(order, verifyResult);
+            await _unitOfWork.Orders.UpdateAsync(order);
+            await _unitOfWork.SaveChangesAsync();
+
+            return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
+                new CheckoutPaymentResultDto
+                {
+                    Success = true,
+                    OrderId = order.Id,
+                    OrderNumber = order.OrderNumber,
+                    Message = "Payment verified successfully.",
+                    IsIdempotent = true,
+                    PaymentProvider = PaymentMethod.Paystack.ToString(),
+                    PaymentReference = order.PaymentReference,
+                    PaymentStatus = order.PaymentStatus.ToString(),
+                    PublicKey = _paystackService.GetPublicKey()
+                });
+        }
+
+        var initResult = await InitializePaystackForOrderAsync(order, userId, reference, callbackUrl);
+        if (!initResult.Success)
+        {
+            return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse(initResult.Message);
+        }
+
+        return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
+            BuildPaystackResult(order, initResult, isIdempotent: true),
+            "Order already exists for this payment request.");
+    }
+
+    private async Task<PaystackInitializeResult> InitializePaystackForOrderAsync(
+        TBM.Core.Entities.Orders.Order order,
+        Guid userId,
+        string reference,
+        string? callbackUrl)
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        if (user == null || string.IsNullOrWhiteSpace(user.Email))
+        {
+            return PaystackInitializeResult.Failure("Unable to resolve user email for Paystack payment.");
+        }
+
+        var initResult = await _paystackService.InitializeTransactionAsync(new PaystackInitializeRequest
+        {
+            Email = user.Email,
+            Amount = order.Total,
+            Reference = reference,
+            CallbackUrl = callbackUrl,
+            Currency = _paystackService.GetCurrency(),
+            Metadata = new
+            {
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                userId
+            }
+        });
+
+        if (!initResult.Success)
+        {
+            _logger.LogWarning(
+                "Paystack initialization failed. Order={OrderNumber} Reference={Reference} Message={Message}",
+                order.OrderNumber,
+                reference,
+                initResult.Message);
+            return initResult;
+        }
+
+        order.PaymentReference = initResult.Reference;
+        order.PaymentMethod = PaymentMethod.Paystack;
+
+        await _unitOfWork.Orders.UpdateAsync(order);
+        await SavePaystackInitializationSnapshotAsync(order, initResult);
+        await _unitOfWork.SaveChangesAsync();
+
+        await _auditService.LogAsync(
+            action: "Checkout.Payment.PaystackInitialized",
+            category: "Commerce",
+            oldValue: null,
+            newValue: new
+            {
+                userId,
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                reference = initResult.Reference
+            });
+
+        return initResult;
+    }
+
+    private async Task SavePaystackInitializationSnapshotAsync(
+        TBM.Core.Entities.Orders.Order order,
+        PaystackInitializeResult initializeResult)
+    {
+        var snapshot = new PaystackInitializationSnapshot
+        {
+            OrderId = order.Id,
+            OrderNumber = order.OrderNumber,
+            Reference = initializeResult.Reference,
+            AuthorizationUrl = initializeResult.AuthorizationUrl,
+            AccessCode = initializeResult.AccessCode,
+            PublicKey = _paystackService.GetPublicKey(),
+            CreatedAtUtc = DateTime.UtcNow
+        };
+
+        var existing = await _unitOfWork.WebhookEvents
+            .GetByReferenceAndEventTypeAsync(initializeResult.Reference, PaystackInitializationEventType);
+
+        if (existing == null)
+        {
+            await _unitOfWork.WebhookEvents.AddAsync(new WebhookEvent
+            {
+                Provider = "Paystack",
+                EventType = PaystackInitializationEventType,
+                Reference = initializeResult.Reference,
+                Payload = JsonSerializer.Serialize(snapshot),
+                Processed = true,
+                ProcessedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            });
+            return;
+        }
+
+        existing.Payload = JsonSerializer.Serialize(snapshot);
+        existing.Processed = true;
+        existing.ProcessedAt = DateTime.UtcNow;
+    }
+
+    private static bool TryReadInitializationSnapshot(string payload, out PaystackInitializationSnapshot snapshot)
+    {
+        snapshot = new PaystackInitializationSnapshot();
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<PaystackInitializationSnapshot>(payload);
+            if (parsed == null || string.IsNullOrWhiteSpace(parsed.Reference))
+            {
+                return false;
+            }
+
+            snapshot = parsed;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static void ApplyVerificationResultToOrder(
+        TBM.Core.Entities.Orders.Order order,
+        PaystackVerificationResult verificationResult)
+    {
+        var status = verificationResult.Status.Trim().ToLowerInvariant();
+        order.PaymentMethod = PaymentMethod.Paystack;
+        order.PaymentReference = verificationResult.Reference;
+
+        if (status == "success")
+        {
+            order.PaymentStatus = PaymentStatus.Paid;
+            order.PaidAt ??= verificationResult.PaidAtUtc ?? DateTime.UtcNow;
+
+            if (order.Status == OrderStatus.Pending)
+            {
+                order.Status = OrderStatus.PaymentReceived;
+            }
+
+            return;
+        }
+
+        if (status is "failed" or "abandoned" or "reversed")
+        {
+            order.PaymentStatus = PaymentStatus.Failed;
+            return;
+        }
+
+        order.PaymentStatus = PaymentStatus.Pending;
+    }
+
+    private CheckoutPaymentResultDto BuildPaystackResult(
+        TBM.Core.Entities.Orders.Order order,
+        PaystackInitializeResult initializeResult,
+        bool isIdempotent)
+    {
+        return new CheckoutPaymentResultDto
+        {
+            Success = true,
+            OrderId = order.Id,
+            OrderNumber = order.OrderNumber,
+            Message = initializeResult.Message,
+            IsIdempotent = isIdempotent,
+            PaymentProvider = PaymentMethod.Paystack.ToString(),
+            PaymentReference = initializeResult.Reference,
+            PaymentStatus = order.PaymentStatus.ToString(),
+            AuthorizationUrl = initializeResult.AuthorizationUrl,
+            AccessCode = initializeResult.AccessCode,
+            PublicKey = _paystackService.GetPublicKey()
+        };
     }
 
     private async Task<(List<CheckoutAddressDto> addresses, CheckoutAddressDto? defaultAddress)> GetAddressDataAsync(Guid userId)
@@ -288,7 +633,17 @@ public class CheckoutService : ICheckoutService
             return dto.IdempotencyKey;
         }
 
-        return dto.Payment.Reference;
+        if (!string.IsNullOrWhiteSpace(dto.Payment.Reference))
+        {
+            return dto.Payment.Reference;
+        }
+
+        return null;
+    }
+
+    private static string GeneratePaymentReference()
+    {
+        return $"TBM-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}";
     }
 
     private static PaymentMethod? ParsePaymentMethod(string? method)
@@ -341,5 +696,16 @@ public class CheckoutService : ICheckoutService
     private static string? FirstNonEmpty(params string?[] values)
     {
         return values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+    }
+
+    private sealed class PaystackInitializationSnapshot
+    {
+        public Guid OrderId { get; set; }
+        public string OrderNumber { get; set; } = string.Empty;
+        public string Reference { get; set; } = string.Empty;
+        public string? AuthorizationUrl { get; set; }
+        public string? AccessCode { get; set; }
+        public string? PublicKey { get; set; }
+        public DateTime CreatedAtUtc { get; set; }
     }
 }

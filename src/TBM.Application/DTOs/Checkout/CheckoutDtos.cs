@@ -67,6 +67,7 @@ public class CheckoutPaymentDetailsDto
 {
     public string? Method { get; set; }
     public string? Reference { get; set; }
+    public string? CallbackUrl { get; set; }
 }
 
 public class CheckoutPaymentRequestDto
@@ -85,4 +86,10 @@ public class CheckoutPaymentResultDto
     public string OrderNumber { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public bool IsIdempotent { get; set; }
+    public string? PaymentProvider { get; set; }
+    public string? PaymentReference { get; set; }
+    public string? PaymentStatus { get; set; }
+    public string? AuthorizationUrl { get; set; }
+    public string? AccessCode { get; set; }
+    public string? PublicKey { get; set; }
 }

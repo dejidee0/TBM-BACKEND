@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TBM.Application.DTOs.AI;
+using TBM.Application.Interfaces;
 using TBM.Application.Services;
 
 namespace TBM.API.Controllers.V1.AI;
@@ -9,14 +11,15 @@ namespace TBM.API.Controllers.V1.AI;
 [ApiController]
 [Route("api/v1/ai")]
 [Authorize]
+[EnableRateLimiting("DynamicPolicy")]
 public class AIController : ControllerBase
 {
-    private readonly AIService _aiService;
+    private readonly IAIService _aiService;
     private readonly AIUsageService _aiUsageService;
     private readonly AICreditService _aiCreditService;
 
     public AIController(
-        AIService aiService,
+        IAIService aiService,
         AIUsageService aiUsageService,
         AICreditService aiCreditService)
     {
@@ -31,6 +34,14 @@ public class AIController : ControllerBase
         var userId = GetCurrentUserId();
         var project = await _aiService.CreateProjectAsync(userId, dto);
         return Ok(project);
+    }
+
+    [HttpGet("projects")]
+    public async Task<IActionResult> GetProjects()
+    {
+        var userId = GetCurrentUserId();
+        var projects = await _aiService.GetUserProjectsAsync(userId);
+        return Ok(projects);
     }
 
     [HttpPost("generate/image")]

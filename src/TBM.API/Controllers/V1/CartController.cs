@@ -49,7 +49,7 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart
     /// </summary>
-    [HttpGet("~/api/cart")]
+    [HttpGet("api/cart")]
     public async Task<IActionResult> GetCartCompatibility()
     {
         var userId = GetUserId();
@@ -92,7 +92,7 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart/add
     /// </summary>
-    [HttpPost("~/api/cart/add")]
+    [HttpPost("api/cart/add")]
     public async Task<IActionResult> AddToCartCompatibility([FromBody] AddToCartDto dto)
     {
         var userId = GetUserId();
@@ -136,7 +136,7 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart/items/:itemId
     /// </summary>
-    [HttpPut("~/api/cart/items/{itemId:guid}")]
+    [HttpPut("api/cart/items/{itemId:guid}")]
     public async Task<IActionResult> UpdateCartItemCompatibility(Guid itemId, [FromBody] UpdateCartItemDto dto)
     {
         var userId = GetUserId();
@@ -176,7 +176,7 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart/items/:itemId
     /// </summary>
-    [HttpDelete("~/api/cart/items/{itemId:guid}")]
+    [HttpDelete("api/cart/items/{itemId:guid}")]
     public async Task<IActionResult> RemoveCartItemCompatibility(Guid itemId)
     {
         var userId = GetUserId();
@@ -205,6 +205,37 @@ public class CartController : ControllerBase
         }
         
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Merge guest cart items into authenticated user's persistent cart
+    /// </summary>
+    [HttpPost("merge")]
+    public async Task<IActionResult> MergeCart([FromBody] MergeCartRequestDto dto)
+    {
+        var userId = GetUserId();
+        var result = await _cartService.MergeGuestCartAsync(userId, dto);
+
+        if (!result.Success || result.Data == null)
+        {
+            return BadRequest(new { success = false, message = result.Message });
+        }
+
+        return Ok(new
+        {
+            success = true,
+            cart = result.Data.Cart,
+            warnings = result.Data.Warnings
+        });
+    }
+
+    /// <summary>
+    /// Compatibility endpoint for frontend route: /api/cart/merge
+    /// </summary>
+    [HttpPost("~/api/cart/merge")]
+    public Task<IActionResult> MergeCartCompatibility([FromBody] MergeCartRequestDto dto)
+    {
+        return MergeCart(dto);
     }
 
     /// <summary>
@@ -238,7 +269,7 @@ public class CartController : ControllerBase
     /// <summary>
     /// Get related products based on items currently in cart
     /// </summary>
-    [HttpGet("~/api/cart/related")]
+    [HttpGet("api/cart/related")]
     public async Task<IActionResult> GetCartRelated([FromQuery] int limit = 4)
     {
         var userId = GetUserId();

@@ -17,13 +17,18 @@ public static class ServiceExtensions
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<ICartService, CartService>();
         services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<IContactService, ContactService>();
         services.AddScoped<IPromoService, PromoService>();
         services.AddScoped<ICheckoutService, CheckoutService>();
+        services.AddScoped<PaystackWebhookService>();
         services.AddScoped<ImageUploadService>();
         services.AddScoped<UserDataStoreService>();
         services.AddScoped<AIGeneratedMediaService>();
+        services.AddScoped<IAIService, AIService>();
         services.AddScoped<AIUsageService>();
         services.AddScoped<AICreditService>();
+        services.AddScoped<RenovationEstimatorService>();
+        services.AddScoped<AIPersonalAssistantService>();
         services.AddScoped<VendorDomainService>();
 
         

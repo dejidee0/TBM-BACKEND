@@ -17,7 +17,9 @@ public class AIDesign : AuditableEntity
 
     public string? Provider { get; set; }
     public string? ProviderJobId { get; set; }
+    public bool IsPublic { get; set; } = false;
+    public DateTime? PublishedAt { get; set; }
 
- [JsonIgnore] // ✅ FIX: Prevent circular reference
+    [JsonIgnore]
     public AIProject AIProject { get; set; } = null!;
 }

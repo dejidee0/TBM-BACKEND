@@ -10,4 +10,5 @@ public interface ICartService
     Task<ApiResponse<CartDto>> UpdateCartItemAsync(Guid userId, Guid itemId, UpdateCartItemDto dto);
     Task<ApiResponse<bool>> RemoveCartItemAsync(Guid userId, Guid itemId);
     Task<ApiResponse<bool>> ClearCartAsync(Guid userId);
+    Task<ApiResponse<MergeCartResultDto>> MergeGuestCartAsync(Guid userId, MergeCartRequestDto dto);
 }

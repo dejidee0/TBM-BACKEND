@@ -8,7 +8,6 @@ using TBM.Core.Enums;
 namespace TBM.API.Controllers.V1;
 
 [ApiController]
-[Route("api/vendor")]
 [Route("api/v1/vendor")]
 [Authorize(Roles = "Vendor")]
 public class VendorController : ControllerBase
@@ -52,7 +51,8 @@ public class VendorController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null,
-        [FromQuery] bool assignedOnly = false)
+        [FromQuery] bool assignedOnly = false,
+        [FromQuery] string? type = null)
     {
         var vendorId = GetVendorId();
         var result = await _vendorService.GetOrdersAsync(
@@ -63,8 +63,49 @@ public class VendorController : ControllerBase
             search,
             fromDate,
             toDate,
-            assignedOnly);
+            assignedOnly,
+            type);
 
+        return Ok(result);
+    }
+
+    [HttpGet("orders/export")]
+    public async Task<IActionResult> ExportOrders(
+        [FromQuery] OrderStatus? status = null,
+        [FromQuery] string? search = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] bool assignedOnly = false,
+        [FromQuery] string? type = null)
+    {
+        var vendorId = GetVendorId();
+        var (content, fileName, contentType, sizeBytes) = await _vendorService.ExportOrdersAsync(
+            vendorId,
+            status,
+            search,
+            fromDate,
+            toDate,
+            assignedOnly,
+            type);
+
+        var dto = new VendorOrderExportResultDto
+        {
+            Success = true,
+            FileName = fileName,
+            ContentType = contentType,
+            SizeBytes = sizeBytes,
+            ContentBase64 = Convert.ToBase64String(content)
+        };
+        return Ok(dto);
+    }
+
+    [HttpPost("orders/import")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(10_485_760)] // 10 MB limit
+    public async Task<IActionResult> ImportOrders(IFormFile file)
+    {
+        var vendorId = GetVendorId();
+        var result = await _vendorService.ImportOrdersAsync(vendorId, file);
         return Ok(result);
     }
 
@@ -170,6 +211,33 @@ public class VendorController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("~/api/inventory/stats")]
+    public async Task<IActionResult> GetInventoryStats()
+    {
+        var vendorId = GetVendorId();
+        var result = await _vendorService.GetInventoryStatsAsync(vendorId);
+        return Ok(result);
+    }
+
+    [HttpPost("~/api/inventory/products")]
+    public async Task<IActionResult> CreateInventoryProduct([FromBody] VendorInventoryCreateRequest request)
+    {
+        try
+        {
+            var vendorId = GetVendorId();
+            var result = await _vendorService.CreateInventoryProductAsync(vendorId, request);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+    }
+
     [HttpPut("inventory/{productId:guid}")]
     public async Task<IActionResult> UpdateInventory(Guid productId, [FromBody] VendorInventoryUpdateRequest request)
     {
@@ -178,6 +246,25 @@ public class VendorController : ControllerBase
             var vendorId = GetVendorId();
             var result = await _vendorService.UpdateInventoryAsync(vendorId, productId, request);
             return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { error = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+    }
+
+    [HttpDelete("~/api/inventory/products/{productId:guid}")]
+    public async Task<IActionResult> DeleteInventoryProduct(Guid productId)
+    {
+        try
+        {
+            var vendorId = GetVendorId();
+            await _vendorService.DeleteInventoryProductAsync(vendorId, productId);
+            return Ok(new { success = true });
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -259,6 +346,14 @@ public class VendorController : ControllerBase
         {
             return NotFound(new { error = ex.Message });
         }
+    }
+
+    [HttpPut("~/api/notifications/mark-all-read")]
+    public async Task<IActionResult> MarkAllNotificationsRead()
+    {
+        var vendorId = GetVendorId();
+        var updated = await _vendorService.MarkAllNotificationsReadAsync(vendorId);
+        return Ok(new { success = true, markedCount = updated });
     }
 
     private Guid GetVendorId()

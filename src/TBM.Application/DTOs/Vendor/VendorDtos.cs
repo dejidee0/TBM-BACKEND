@@ -38,6 +38,7 @@ public class VendorOrderListItemDto
     public Guid Id { get; set; }
     public string OrderNumber { get; set; } = string.Empty;
     public string CustomerName { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty; // e-commerce or renovation/service
     public OrderStatus Status { get; set; }
     public PaymentStatus PaymentStatus { get; set; }
     public decimal Total { get; set; }
@@ -85,6 +86,8 @@ public class VendorOrderItemDto
     public decimal SubTotal { get; set; }
 }
 
+
+
 public class VendorOrderStatusUpdateRequest
 {
     public OrderStatus Status { get; set; }
@@ -113,6 +116,31 @@ public class VendorInventoryItemDto
     public bool IsLowStock { get; set; }
     public bool IsActive { get; set; }
     public decimal? Price { get; set; }
+}
+
+public class VendorInventoryStatsDto
+{
+    public int TotalProducts { get; set; }
+    public int ActiveProducts { get; set; }
+    public int LowStockProducts { get; set; }
+    public int OutOfStockProducts { get; set; }
+    public int TotalStockUnits { get; set; }
+}
+
+public class VendorInventoryCreateRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? ShortDescription { get; set; }
+    public Guid CategoryId { get; set; }
+    public string? SKU { get; set; }
+    public int? BrandType { get; set; }
+    public int? ProductType { get; set; }
+    public decimal? Price { get; set; }
+    public int StockQuantity { get; set; }
+    public int? LowStockThreshold { get; set; }
+    public bool IsActive { get; set; } = true;
+    public bool? TrackInventory { get; set; }
 }
 
 public class VendorInventoryUpdateRequest
@@ -194,4 +222,22 @@ public class VendorProductOwnershipDto
     public string TenantId { get; set; } = string.Empty;
     public Guid AssignedByUserId { get; set; }
     public DateTime AssignedAtUtc { get; set; }
+}
+
+public class VendorOrderExportResultDto
+{
+    public bool Success { get; set; }
+    public string FileName { get; set; } = string.Empty;
+    public string ContentType { get; set; } = "text/csv";
+    public long SizeBytes { get; set; }
+    // optional base64 representation of file content; consumers can decode and download
+    public string? ContentBase64 { get; set; }
+}
+
+public class VendorOrderImportResultDto
+{
+    public bool Success { get; set; }
+    public int Imported { get; set; }
+    public int Failed { get; set; }
+    public List<string> Errors { get; set; } = new();
 }

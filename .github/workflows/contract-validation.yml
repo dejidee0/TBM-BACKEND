@@ -1,0 +1,52 @@
+name: Contract Validation
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+
+jobs:
+  contract-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore TBM.DigitalPlatform.sln
+
+      - name: Build
+        run: dotnet build TBM.DigitalPlatform.sln --configuration Release --no-restore
+
+      - name: Run Contract Tests
+        run: dotnet test tests/TBM.API.ContractTests/TBM.API.ContractTests.csproj --configuration Release --no-build --verbosity minimal
+
+      - name: Generate OpenAPI
+        shell: bash
+        run: |
+          ASPNETCORE_ENVIRONMENT=Production ASPNETCORE_URLS=http://127.0.0.1:5107 dotnet run --project src/TBM.API/TBM.API.csproj --configuration Release --no-build > api.log 2>&1 &
+          API_PID=$!
+          trap 'kill $API_PID || true' EXIT
+
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:5107/swagger/v1/swagger.json -o openapi.v1.json; then
+              break
+            fi
+            sleep 2
+          done
+
+          test -s openapi.v1.json
+
+      - name: Upload OpenAPI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-v1
+          path: openapi.v1.json

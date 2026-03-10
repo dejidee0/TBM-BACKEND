@@ -116,35 +116,32 @@ public class OrderService : IOrderService
             }
         }
         
-        // Begin transaction
-        await _unitOfWork.BeginTransactionAsync();
-        
-        try
+        // Calculate totals
+        var subTotal = cart.Items.Sum(i => i.Quantity * i.UnitPrice);
+        var shippingCost = Math.Max(0m, dto.ShippingCost ?? 0m);
+        var tax = Math.Max(0m, dto.Tax ?? 0m);
+        var discount = Math.Max(0m, dto.Discount ?? 0m);
+
+        if (discount > subTotal + shippingCost + tax)
+        {
+            return ApiResponse<OrderDto>.ErrorResponse("Discount cannot exceed order amount");
+        }
+
+        var total = subTotal + shippingCost + tax - discount;
+
+        var customerNotes = dto.CustomerNotes;
+        if (!string.IsNullOrWhiteSpace(dto.PromoCode))
+        {
+            customerNotes = string.IsNullOrWhiteSpace(customerNotes)
+                ? $"Promo: {dto.PromoCode.Trim().ToUpperInvariant()}"
+                : $"{customerNotes}{Environment.NewLine}Promo: {dto.PromoCode.Trim().ToUpperInvariant()}";
+        }
+
+        var orderId = await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             // Generate order number
             var orderNumber = await _unitOfWork.Orders.GenerateOrderNumberAsync();
-            
-            // Calculate totals
-            var subTotal = cart.Items.Sum(i => i.Quantity * i.UnitPrice);
-            var shippingCost = Math.Max(0m, dto.ShippingCost ?? 0m);
-            var tax = Math.Max(0m, dto.Tax ?? 0m);
-            var discount = Math.Max(0m, dto.Discount ?? 0m);
 
-            if (discount > subTotal + shippingCost + tax)
-            {
-                return ApiResponse<OrderDto>.ErrorResponse("Discount cannot exceed order amount");
-            }
-
-            var total = subTotal + shippingCost + tax - discount;
-
-            var customerNotes = dto.CustomerNotes;
-            if (!string.IsNullOrWhiteSpace(dto.PromoCode))
-            {
-                customerNotes = string.IsNullOrWhiteSpace(customerNotes)
-                    ? $"Promo: {dto.PromoCode.Trim().ToUpperInvariant()}"
-                    : $"{customerNotes}{Environment.NewLine}Promo: {dto.PromoCode.Trim().ToUpperInvariant()}";
-            }
-            
             // Create order
             var order = new Order
             {
@@ -165,10 +162,10 @@ public class OrderService : IOrderService
                 ShippingNotes = dto.ShippingNotes,
                 CustomerNotes = customerNotes
             };
-            
+
             await _unitOfWork.Orders.CreateAsync(order);
             await _unitOfWork.SaveChangesAsync();
-            
+
             // Create order items
             foreach (var cartItem in cart.Items)
             {
@@ -184,9 +181,9 @@ public class OrderService : IOrderService
                     UnitPrice = cartItem.UnitPrice,
                     SubTotal = cartItem.Quantity * cartItem.UnitPrice
                 };
-                
+
                 order.Items.Add(orderItem);
-                
+
                 // Update product stock
                 if (cartItem.Product.TrackInventory)
                 {
@@ -196,29 +193,23 @@ public class OrderService : IOrderService
                     );
                 }
             }
-            
+
             await _unitOfWork.SaveChangesAsync();
-            
+
             // Clear cart
             await _unitOfWork.Carts.ClearCartAsync(cart.Id);
             await _unitOfWork.SaveChangesAsync();
-            
-            // Commit transaction
-            await _unitOfWork.CommitTransactionAsync();
-            
-            // Reload order with all details
-            order = await _unitOfWork.Orders.GetByIdAsync(order.Id);
-            
-            return ApiResponse<OrderDto>.SuccessResponse(
-                MapOrderToDto(order!),
-                "Order created successfully"
-            );
-        }
-        catch (Exception)
-        {
-            await _unitOfWork.RollbackTransactionAsync();
-            throw;
-        }
+
+            return order.Id;
+        });
+
+        // Reload order with all details
+        var createdOrder = await _unitOfWork.Orders.GetByIdAsync(orderId);
+
+        return ApiResponse<OrderDto>.SuccessResponse(
+            MapOrderToDto(createdOrder!),
+            "Order created successfully"
+        );
     }
     
     public async Task<ApiResponse<OrderDto>> UpdateOrderStatusAsync(Guid orderId, UpdateOrderStatusDto dto)

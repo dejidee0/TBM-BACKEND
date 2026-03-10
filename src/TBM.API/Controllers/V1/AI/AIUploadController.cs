@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using TBM.Application.Services;
 
@@ -8,6 +9,7 @@ namespace TBM.API.Controllers.V1.AI
     [ApiController]
     [Route("api/v1/ai")]
     [Authorize]
+    [EnableRateLimiting("DynamicPolicy")]
     public class AIUploadController : ControllerBase
     {
         private readonly ImageUploadService _uploadService;

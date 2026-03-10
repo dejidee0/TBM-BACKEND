@@ -14,6 +14,8 @@ public interface IProductRepository
         ProductType? productType = null,
         Guid? categoryId = null,
         string? searchTerm = null,
+        decimal? minPrice = null,
+        decimal? maxPrice = null,
         bool? isFeatured = null,
         bool activeOnly = true
     );

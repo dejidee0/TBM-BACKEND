@@ -4,10 +4,8 @@ namespace TBM.Application.DTOs.Auth;
 
 public class VerifyEmailCodeDto
 {
-    [Required]
     [EmailAddress]
-    public string Email { get; set; } = string.Empty;
+    public string? Email { get; set; }
 
-    [Required]
-    public string Code { get; set; } = string.Empty;
+    public string? Code { get; set; }
 }

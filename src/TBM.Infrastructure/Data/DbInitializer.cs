@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using TBM.Core.Entities.Products;
 using TBM.Core.Entities.Users;
 using TBM.Core.Enums;
@@ -8,6 +9,9 @@ public static class DbInitializer
 {
     public static async Task SeedAsync(ApplicationDbContext context)
     {
+        // Keep dev/local aligned with EF migrations and avoid schema drift from EnsureCreated.
+        await context.Database.MigrateAsync();
+
         // Seed Roles if they don't exist
         if (!context.Roles.Any())
         {

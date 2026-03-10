@@ -12,6 +12,128 @@ This document was derived from:
 
 Current API surface in controllers: 68 endpoints.
 
+## Phase 6 Addendum (February 22, 2026)
+
+Platform hardening additions implemented:
+- Request ID and correlation headers (`X-Request-ID`, `X-Correlation-ID`) are now returned on API responses.
+- Structured request logging is enabled with method/path/status/latency/requestId/userId/client metadata.
+- Dynamic rate limiting is tuned by endpoint risk profile (auth-sensitive, checkout-payment, AI generation, admin, default).
+- 429 responses now include a consistent JSON error contract and `Retry-After` header.
+- Dedicated webhook limiter policy is applied to `POST /api/webhooks/paystack`.
+- Admin SLO endpoints added:
+  - `GET /api/admin/observability/slo/overview`
+  - `GET /api/admin/observability/slo/{domain}` where `{domain}` is typically `auth`, `checkout`, or `ai`.
+- Contract tests and CI gate added:
+  - `tests/TBM.API.ContractTests/*`
+  - `.github/workflows/contract-validation.yml`
+
+## Phase 7 Addendum (March 6, 2026) - Frontend Corrections Batch
+
+### Product and Materials Contract
+
+- `GET /api/v1/products` now supports additional server-side filters:
+  - `minPrice`
+  - `maxPrice`
+  - `isFeatured`
+- New materials alias (canonical payload shape): `GET /api/v1/materials`
+- Material detail alias accepting GUID or slug: `GET /api/v1/materials/{idOrSlug}`
+- Product detail payloads now include additive `similarProducts` list:
+  - `GET /api/v1/products/{id}`
+  - `GET /api/v1/products/slug/{slug}`
+  - `GET /api/v1/materials/{idOrSlug}`
+- `similarProducts` behavior:
+  - default related limit: `4`
+  - hard cap: `12`
+
+### Cart Ownership Policy and Guest Merge
+
+- Backend remains the source of truth for authenticated cart state.
+- Frontend guest cart is temporary/local only; on login, merge once via API.
+- New authenticated merge endpoint:
+  - Canonical: `POST /api/v1/cart/merge`
+  - Compatibility alias: `POST /api/cart/merge`
+- Request body:
+
+```json
+{
+  "items": [
+    { "productId": "guid", "quantity": 2 }
+  ]
+}
+```
+
+- Merge response:
+  - `cart`: merged authoritative backend cart
+  - `warnings`: skipped/capped items (`PRODUCT_UNAVAILABLE`, `QUANTITY_CAPPED`, `OUT_OF_STOCK`, etc.)
+- Merge runs in a single DB transaction.
+
+### Public Projects Feed
+
+- Designs now support publish controls:
+  - `AIDesign.IsPublic` (`false` default)
+  - `AIDesign.PublishedAt` (nullable UTC)
+- Public feed endpoint (anonymous): `GET /api/v1/public/projects`
+  - Query: `page`, `limit`, `roomType`, `search`, `sort`
+  - Returns gallery-safe design/project card data only (no user PII)
+  - Includes only published (`IsPublic = true`) and non-deleted rows
+- Owner visibility toggle endpoint:
+  - `PATCH /api/v1/designs/{id}/visibility`
+  - Body: `{ "isPublic": true|false }`
+
+### Contact Endpoint
+
+- New anonymous endpoint: `POST /api/v1/contact`
+- Persists message first, then attempts support-email dispatch.
+- On email failure:
+  - API still returns success,
+  - record is kept with `EmailSent = false` and stored `EmailError`.
+- Response contract:
+
+```json
+{
+  "accepted": true,
+  "referenceId": "guid"
+}
+```
+
+### AI Project Listing (`projectId` usability)
+
+- Existing create endpoint remains: `POST /api/v1/ai/projects`
+- Added authenticated list endpoint: `GET /api/v1/ai/projects`
+- List item fields:
+  - `id`
+  - `status`
+  - `generationType`
+  - `contextLabel`
+  - `createdAt`
+  - `latestDesignUrl`
+  - `designCount`
+
+### Social Auth Status
+
+- OAuth implementation is still deferred.
+- Existing provider routes continue returning `501`:
+  - `GET /auth/google`
+  - `GET /auth/apple`
+- Provider capability endpoint added:
+  - `GET /api/v1/auth/providers` (anonymous)
+  - Driven by:
+    - `AuthProviders:Google:Enabled`
+    - `AuthProviders:Apple:Enabled`
+  - Current defaults: both `false`
+
+### Orders Canonicalization and Deprecation
+
+- Canonical user dashboard route:
+  - `GET /api/v1/orders/my-orders`
+- Compatibility routes retained temporarily:
+  - `GET /api/orders`
+  - `GET /api/orders/{orderId}`
+- Compatibility response now follows canonical envelope shape (`ApiResponse<...>`).
+- Deprecation headers are now included on compatibility routes:
+  - `Deprecation: true`
+  - `Sunset: Tue, 30 Jun 2026 23:59:59 GMT`
+
 ## 1. Platform Overview
 
 - Primary API prefixes:
@@ -85,8 +207,10 @@ Maintenance response shape:
 
 ### 3.3 CORS
 
-- Policy name: `AllowAll`
-- Allows any origin, method, and header.
+- Policy name: `AllowConfiguredOrigins`
+- Reads allowed origins from `Cors:AllowedOrigins`.
+- Allows any method/header and supports credentialed requests (`AllowCredentials`).
+- Wildcard origin (`*`) is not used.
 
 ## 4. Common Response Patterns
 
@@ -360,7 +484,20 @@ All endpoints require role `Admin` or `SuperAdmin`.
 | GET | `/api/admin/settings/general` | none | `GeneralSettingsDto` |
 | PUT | `/api/admin/settings/general` | `GeneralSettingsDto` body | `"General settings updated"` |
 
-## 6.12 Paystack Webhook (`/api/webhooks/paystack`)
+## 6.12 Checkout Paystack Verification (`/api/v1/checkout/payment/paystack/verify/{reference}`)
+
+Controller: `src/TBM.API/Controllers/V1/CheckoutController.cs`
+
+| Method | Path | Auth | Request | Success Response | Failure Behavior |
+|---|---|---|---|---|---|
+| GET | `/api/v1/checkout/payment/paystack/verify/{reference}` | JWT required | path `reference` | `{ success, orderId, orderNumber, message, paymentStatus, ... }` | 400 if reference/order invalid or verification fails |
+
+Verification behavior:
+- Calls Paystack `transaction/verify`.
+- On `success`, sets order `PaymentStatus = Paid`, `PaymentMethod = Paystack`, `PaidAt = UtcNow` (if unset), and moves `OrderStatus` from `Pending` to `PaymentReceived`.
+- On `failed`/`abandoned`, sets order `PaymentStatus = Failed`.
+
+## 6.13 Paystack Webhook (`/api/webhooks/paystack`)
 
 Controller: `src/TBM.API/Controllers/V1/Payments/PaystackWebhookController.cs`
 
@@ -370,11 +507,12 @@ Controller: `src/TBM.API/Controllers/V1/Payments/PaystackWebhookController.cs`
 
 Webhook processing behavior:
 - Verifies HMAC SHA512 using `Paystack:SecretKey`.
-- Uses `data.reference` as idempotency key.
-- On `charge.success`, loads order by order number/reference and updates:
+- Uses `reference + eventType` for idempotency.
+- On `charge.success`, loads order by payment reference/order number and updates:
   - `PaymentStatus = Paid`
-  - `OrderStatus = Processing`
+  - `OrderStatus = PaymentReceived` (if previous state is `Pending`)
   - `PaidAt = UtcNow`
+- On `charge.failed`, sets `PaymentStatus = Failed`.
 
 ## 7. Request DTO Schemas
 
@@ -894,4 +1032,3 @@ Form field:
 - Admin auth controller returns HTTP 200 even for logical failures (check `success` in payload).
 - AI endpoints are exception-driven and may produce raw 500 responses with `{ error }`.
 - `verify-email` is implemented as `POST` with query token instead of body payload.
-

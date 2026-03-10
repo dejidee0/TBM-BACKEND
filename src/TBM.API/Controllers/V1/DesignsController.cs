@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using TBM.Application.DTOs.AI;
 using TBM.Application.Services;
 using TBM.Core.Enums;
 using TBM.Core.Interfaces;
@@ -175,6 +176,46 @@ public class DesignsController : ControllerBase
 
         await _auditService.LogAsync("Design.Delete", "DesignLibrary", new { designId = id }, null);
         return Ok(new { success = true });
+    }
+
+    [HttpPatch("{id:guid}/visibility")]
+    public async Task<IActionResult> UpdateVisibility(Guid id, [FromBody] UpdateDesignVisibilityDto dto)
+    {
+        var userId = GetUserId();
+        var design = await _unitOfWork.AIDesigns.GetByIdAsync(id);
+
+        if (design == null || design.IsDeleted)
+        {
+            return NotFound(new { success = false, message = "Design not found" });
+        }
+
+        if (design.AIProject.UserId != userId)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                success = false,
+                message = "Only the design owner can change visibility."
+            });
+        }
+
+        design.IsPublic = dto.IsPublic;
+        design.PublishedAt = dto.IsPublic ? DateTime.UtcNow : null;
+        await _unitOfWork.SaveChangesAsync();
+
+        await _auditService.LogAsync("Design.Visibility.Update", "DesignLibrary", null, new
+        {
+            userId,
+            designId = id,
+            isPublic = dto.IsPublic
+        });
+
+        return Ok(new
+        {
+            success = true,
+            designId = design.Id,
+            isPublic = design.IsPublic,
+            publishedAt = design.PublishedAt
+        });
     }
 
     [HttpGet("~/api/designs/{id:guid}/download")]

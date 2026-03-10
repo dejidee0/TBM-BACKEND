@@ -65,6 +65,105 @@ namespace TBM.Infrastructure.Services
             return SendEmailAsync(toEmail, "Verify Your Email - TBM", body);
         }
 
+
+        public Task SendPasswordChangeOTPAsync(string toEmail, string fullName, string otp)
+{
+    var body = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ 
+            font-family: Arial, sans-serif; 
+            line-height: 1.6; 
+            color: #333;
+            background-color: #f4f4f4;
+        }}
+        .container {{ 
+            max-width: 600px; 
+            margin: 30px auto; 
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }}
+        .header {{ 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; 
+            padding: 30px 20px; 
+            text-align: center;
+        }}
+        .content {{ 
+            padding: 40px 30px;
+        }}
+        .otp-box {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 32px;
+            font-weight: bold;
+            letter-spacing: 8px;
+            padding: 20px;
+            text-align: center;
+            border-radius: 10px;
+            margin: 30px 0;
+            font-family: 'Courier New', monospace;
+        }}
+        .warning {{ 
+            background-color: #fff3cd; 
+            border-left: 4px solid #ffc107; 
+            padding: 15px; 
+            margin: 25px 0;
+            border-radius: 4px;
+        }}
+        .footer {{ 
+            text-align: center; 
+            padding: 20px; 
+            background-color: #f8f9fa;
+            color: #6c757d; 
+            font-size: 12px;
+        }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>🔐 Password Change Request</h1>
+        </div>
+        <div class='content'>
+            <p>Hello <strong>{fullName}</strong>,</p>
+            <p>You requested to change your password. Use the OTP code below to complete the process:</p>
+            
+            <div class='otp-box'>
+                {otp}
+            </div>
+            
+            <p style='text-align: center; color: #666; margin-top: -15px;'>
+                This code will expire in <strong>10 minutes</strong>
+            </p>
+            
+            <div class='warning'>
+                <strong>⚠️ Security Notice:</strong>
+                <ul style='margin: 10px 0; padding-left: 20px;'>
+                    <li>Never share this OTP with anyone</li>
+                    <li>TBM staff will never ask for your OTP</li>
+                    <li>If you didn't request this, ignore this email</li>
+                </ul>
+            </div>
+            
+            <p style='margin-top: 30px; color: #666; font-size: 14px;'>
+                If you're having trouble, contact support at support@buildtbm.com
+            </p>
+        </div>
+        <div class='footer'>
+            <p>© 2026 TBM Building Services. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+    return SendEmailAsync(toEmail, "Your Password Change OTP - TBM Building Services", body);
+}
+
        public Task SendPasswordResetEmailAsync(string toEmail, string fullName, string resetLink)
 {
     var body = $@"

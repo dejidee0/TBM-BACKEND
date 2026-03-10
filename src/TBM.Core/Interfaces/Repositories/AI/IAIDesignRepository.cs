@@ -7,5 +7,11 @@ namespace TBM.Core.Interfaces.Repositories.AI
         Task CreateAsync(AIDesign design);
         Task<AIDesign?> GetByIdAsync(Guid id);
         Task<List<AIDesign>> GetByProjectAsync(Guid projectId);
+        Task<(IReadOnlyList<AIDesign> Items, int TotalCount)> GetPublicPagedAsync(
+            int page,
+            int limit,
+            string? roomType,
+            string? search,
+            string? sort);
     }
 }

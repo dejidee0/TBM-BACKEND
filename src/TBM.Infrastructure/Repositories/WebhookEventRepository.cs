@@ -20,6 +20,22 @@ public class WebhookEventRepository : IWebhookEventRepository
             .FirstOrDefaultAsync(x => x.Reference == reference);
     }
 
+    public async Task<WebhookEvent?> GetByReferenceAndEventTypeAsync(string reference, string eventType)
+    {
+        return await _context.WebhookEvents
+            .Where(x => x.Reference == reference && x.EventType == eventType)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<WebhookEvent?> GetLatestByReferenceAsync(string reference)
+    {
+        return await _context.WebhookEvents
+            .Where(x => x.Reference == reference)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task AddAsync(WebhookEvent webhookEvent)
     {
         await _context.WebhookEvents.AddAsync(webhookEvent);

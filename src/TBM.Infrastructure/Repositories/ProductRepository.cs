@@ -38,6 +38,8 @@ public class ProductRepository : IProductRepository
         ProductType? productType = null,
         Guid? categoryId = null,
         string? searchTerm = null,
+        decimal? minPrice = null,
+        decimal? maxPrice = null,
         bool? isFeatured = null,
         bool activeOnly = true)
     {
@@ -75,6 +77,16 @@ public class ProductRepository : IProductRepository
                 (p.SKU != null && p.SKU.Contains(searchTerm)) ||
                 (p.Tags != null && p.Tags.Contains(searchTerm))
             );
+        }
+
+        if (minPrice.HasValue)
+        {
+            query = query.Where(p => p.Price.HasValue && p.Price.Value >= minPrice.Value);
+        }
+
+        if (maxPrice.HasValue)
+        {
+            query = query.Where(p => p.Price.HasValue && p.Price.Value <= maxPrice.Value);
         }
         
         if (isFeatured.HasValue)

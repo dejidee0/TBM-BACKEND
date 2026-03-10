@@ -14,6 +14,7 @@ Task<List<PaymentDistributionDto>> GetPaymentDistributionAsync();
 
     Task<decimal> GetRevenueAsync(DateTime from, DateTime to);
 Task<int> GetOrderCountAsync(DateTime from, DateTime to);
+Task<List<RevenueByServiceDto>> GetRevenueByServiceAsync(DateTime? fromDate = null, DateTime? toDate = null);
 
     Task<(IEnumerable<Order> Items, int TotalCount)> GetPagedAsync(
         int pageNumber,
@@ -34,4 +35,6 @@ Task<int> GetOrderCountAsync(DateTime from, DateTime to);
     Task<string> GenerateOrderNumberAsync();
     Task<decimal> GetTotalSalesAsync(DateTime? fromDate = null, DateTime? toDate = null);
     Task<int> GetTotalOrdersCountAsync(OrderStatus? status = null);
+    Task<int> GetCountByPaymentStatusAsync(PaymentStatus paymentStatus, DateTime? fromDate = null, DateTime? toDate = null);
+    Task<decimal> GetRevenueByPaymentStatusAsync(PaymentStatus paymentStatus, DateTime? fromDate = null, DateTime? toDate = null);
 }

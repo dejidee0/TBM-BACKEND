@@ -1,7 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using TBM.Application.Services;
+
+namespace TBM.API.Controllers.V1.Payments;
 
 [ApiController]
 [Route("api/webhooks/paystack")]
+[EnableRateLimiting("WebhookPolicy")]
 public class PaystackWebhookController : ControllerBase
 {
     private readonly PaystackWebhookService _service;

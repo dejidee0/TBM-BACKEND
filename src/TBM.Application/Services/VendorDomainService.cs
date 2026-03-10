@@ -1,11 +1,15 @@
 using System.Text.Json;
 using TBM.Application.DTOs.Common;
 using TBM.Application.DTOs.Vendor;
+using TBM.Application.Helpers;
 using TBM.Core.Entities;
 using TBM.Core.Entities.Orders;
+using TBM.Core.Entities.Products;
 using TBM.Core.Entities.Users;
 using TBM.Core.Enums;
 using TBM.Core.Interfaces;
+using Microsoft.AspNetCore.Http;
+using System.Text;
 
 namespace TBM.Application.Services;
 
@@ -181,7 +185,8 @@ public class VendorDomainService
         string? search,
         DateTime? fromDate,
         DateTime? toDate,
-        bool assignedOnly)
+        bool assignedOnly,
+        string? type = null)
     {
         var ownedProductIds = await GetOwnedProductIdsAsync(vendorId);
         var assignments = await GetAssignmentsAsync(vendorId);
@@ -231,6 +236,22 @@ public class VendorDomainService
             .Where(o => assignedOnly
                 ? assignedOrderIds.Contains(o.Id)
                 : o.Items.Any(i => ownedProductIds.Contains(i.ProductId)) || assignedOrderIds.Contains(o.Id))
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(type))
+        {
+            var t = type.Trim().ToLowerInvariant();
+            if (t == "e-commerce" || t == "ecommerce")
+            {
+                filteredOrders = filteredOrders.Where(o => o.Items.Any(i => i.Product != null && i.Product.ProductType == ProductType.PhysicalProduct)).ToList();
+            }
+            else if (t == "renovation" || t == "service")
+            {
+                filteredOrders = filteredOrders.Where(o => o.Items.Any(i => i.Product != null && i.Product.ProductType == ProductType.Service)).ToList();
+            }
+        }
+
+        filteredOrders = filteredOrders
             .OrderByDescending(o => o.CreatedAt)
             .ToList();
 
@@ -248,6 +269,7 @@ public class VendorDomainService
                 Id = order.Id,
                 OrderNumber = order.OrderNumber,
                 CustomerName = $"{order.User.FirstName} {order.User.LastName}".Trim(),
+                Type = order.Items.Any(i => i.Product != null && i.Product.ProductType == ProductType.Service) ? "renovation" : "e-commerce",
                 Status = order.Status,
                 PaymentStatus = order.PaymentStatus,
                 Total = order.Total,
@@ -503,6 +525,193 @@ public class VendorDomainService
         };
     }
 
+    public async Task<VendorInventoryStatsDto> GetInventoryStatsAsync(Guid vendorId)
+    {
+        var ownedProductIds = await GetOwnedProductIdsAsync(vendorId);
+        var stats = new VendorInventoryStatsDto();
+
+        foreach (var productId in ownedProductIds)
+        {
+            var product = await _unitOfWork.Products.GetByIdAsync(productId);
+            if (product == null)
+            {
+                continue;
+            }
+
+            stats.TotalProducts++;
+            if (product.IsActive)
+            {
+                stats.ActiveProducts++;
+            }
+
+            if (!product.TrackInventory)
+            {
+                continue;
+            }
+
+            var stock = Math.Max(0, product.StockQuantity ?? 0);
+            var threshold = Math.Max(0, product.LowStockThreshold ?? 0);
+
+            stats.TotalStockUnits += stock;
+
+            if (stock == 0)
+            {
+                stats.OutOfStockProducts++;
+            }
+
+            if (stock <= threshold)
+            {
+                stats.LowStockProducts++;
+            }
+        }
+
+        return stats;
+    }
+
+    public async Task<VendorInventoryItemDto> CreateInventoryProductAsync(Guid vendorId, VendorInventoryCreateRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            throw new InvalidOperationException("Product name is required.");
+        }
+
+        var brandType = BrandType.Bogat;
+        if (request.BrandType.HasValue)
+        {
+            if (!Enum.IsDefined(typeof(BrandType), request.BrandType.Value))
+            {
+                throw new InvalidOperationException("Invalid brand type.");
+            }
+
+            brandType = (BrandType)request.BrandType.Value;
+        }
+
+        var productType = ProductType.PhysicalProduct;
+        if (request.ProductType.HasValue)
+        {
+            if (!Enum.IsDefined(typeof(ProductType), request.ProductType.Value))
+            {
+                throw new InvalidOperationException("Invalid product type.");
+            }
+
+            productType = (ProductType)request.ProductType.Value;
+        }
+
+        var categoryId = request.CategoryId;
+        if (categoryId == Guid.Empty)
+        {
+            var fallbackCategory = (await _unitOfWork.Categories.GetAllAsync())
+                .OrderBy(c => c.DisplayOrder)
+                .FirstOrDefault(c => c.IsActive);
+
+            if (fallbackCategory == null)
+            {
+                throw new InvalidOperationException("A valid category is required.");
+            }
+
+            categoryId = fallbackCategory.Id;
+        }
+
+        var category = await _unitOfWork.Categories.GetByIdAsync(categoryId);
+        if (category == null)
+        {
+            throw new KeyNotFoundException("Category not found.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.SKU))
+        {
+            var skuExists = await _unitOfWork.Products.SKUExistsAsync(request.SKU.Trim());
+            if (skuExists)
+            {
+                throw new InvalidOperationException("SKU already exists.");
+            }
+        }
+
+        var slug = SlugHelper.GenerateSlug(request.Name.Trim());
+        if (await _unitOfWork.Products.SlugExistsAsync(slug))
+        {
+            slug = $"{slug}-{Guid.NewGuid():N}"[..Math.Min(slug.Length + 9, 80)];
+        }
+
+        var description = string.IsNullOrWhiteSpace(request.Description)
+            ? request.Name.Trim()
+            : request.Description.Trim();
+
+        var shortDescription = string.IsNullOrWhiteSpace(request.ShortDescription)
+            ? (description.Length <= 120 ? description : description[..120])
+            : request.ShortDescription.Trim();
+
+        var product = new Product
+        {
+            Name = request.Name.Trim(),
+            Description = description,
+            ShortDescription = shortDescription,
+            Slug = slug,
+            SKU = string.IsNullOrWhiteSpace(request.SKU) ? null : request.SKU.Trim(),
+            BrandType = brandType,
+            ProductType = productType,
+            CategoryId = categoryId,
+            Price = request.Price,
+            ShowPrice = request.Price.HasValue,
+            StockQuantity = request.StockQuantity,
+            LowStockThreshold = request.LowStockThreshold ?? 5,
+            TrackInventory = request.TrackInventory ?? true,
+            IsActive = request.IsActive,
+            IsFeatured = false,
+            DisplayOrder = 0
+        };
+
+        await _unitOfWork.Products.CreateAsync(product);
+
+        var profile = await GetVendorProfileAsync(vendorId)
+            ?? new VendorProfileRecord
+            {
+                VendorId = vendorId,
+                TenantId = vendorId.ToString("N"),
+                DisplayName = $"vendor-{vendorId:N}",
+                SlaHours = 24,
+                IsActive = true,
+                ActivatedAtUtc = DateTime.UtcNow
+            };
+
+        var ownership = new VendorProductOwnershipRecord
+        {
+            ProductId = product.Id,
+            VendorUserId = vendorId,
+            TenantId = profile.TenantId,
+            AssignedByUserId = vendorId,
+            AssignedAtUtc = DateTime.UtcNow
+        };
+
+        await UpsertSettingAsync(
+            VendorOwnershipCategory,
+            BuildProductOwnershipKey(product.Id),
+            JsonSerializer.Serialize(ownership, JsonOptions),
+            "Vendor product ownership");
+
+        await AddActivityInternalAsync(vendorId, "inventory_created", $"Inventory product created: {product.Name}", null, product.Id);
+        await AddNotificationInternalAsync(vendorId, "inventory", "Inventory product created", $"{product.Name} has been added to inventory.");
+        await _unitOfWork.SaveChangesAsync();
+
+        await _auditService.LogAsync(
+            "Vendor.Inventory.Create",
+            "Vendor",
+            null,
+            new { vendorId, productId = product.Id, product.Name, product.SKU });
+
+        return new VendorInventoryItemDto
+        {
+            ProductId = product.Id,
+            ProductName = product.Name,
+            SKU = product.SKU,
+            StockQuantity = product.StockQuantity,
+            LowStockThreshold = product.LowStockThreshold,
+            IsLowStock = product.TrackInventory && (product.StockQuantity ?? 0) <= (product.LowStockThreshold ?? 0),
+            IsActive = product.IsActive,
+            Price = product.Price
+        };
+    }
+
     public async Task<VendorInventoryItemDto> UpdateInventoryAsync(Guid vendorId, Guid productId, VendorInventoryUpdateRequest request)
     {
         var owner = await GetProductOwnershipAsync(productId);
@@ -543,6 +752,39 @@ public class VendorDomainService
             IsActive = product.IsActive,
             Price = product.Price
         };
+    }
+
+    public async Task DeleteInventoryProductAsync(Guid vendorId, Guid productId)
+    {
+        var owner = await GetProductOwnershipAsync(productId);
+        if (owner == null || owner.VendorUserId != vendorId)
+        {
+            throw new UnauthorizedAccessException("Product does not belong to this vendor.");
+        }
+
+        var product = await _unitOfWork.Products.GetByIdAsync(productId)
+            ?? throw new KeyNotFoundException("Product not found");
+
+        await _unitOfWork.Products.DeleteAsync(productId);
+
+        var ownershipSetting = await _unitOfWork.Settings.GetByKeyAsync(VendorOwnershipCategory, BuildProductOwnershipKey(productId));
+        if (ownershipSetting != null && !ownershipSetting.IsDeleted)
+        {
+            ownershipSetting.IsDeleted = true;
+            ownershipSetting.DeletedAt = DateTime.UtcNow;
+            ownershipSetting.DeletedBy = vendorId.ToString();
+            await _unitOfWork.Settings.UpdateAsync(ownershipSetting);
+        }
+
+        await AddActivityInternalAsync(vendorId, "inventory_deleted", $"Inventory product removed: {product.Name}", null, productId);
+        await AddNotificationInternalAsync(vendorId, "inventory", "Inventory product removed", $"{product.Name} has been removed from inventory.");
+        await _unitOfWork.SaveChangesAsync();
+
+        await _auditService.LogAsync(
+            "Vendor.Inventory.Delete",
+            "Vendor",
+            new { vendorId, productId, product.Name },
+            null);
     }
 
     public async Task<VendorPagedResultDto<VendorDeliveryAssignmentDto>> GetDeliveriesAsync(Guid vendorId, int page, int pageSize, OrderStatus? status)
@@ -682,6 +924,40 @@ public class VendorDomainService
             await _unitOfWork.Settings.UpdateAsync(setting);
             await _unitOfWork.SaveChangesAsync();
         }
+    }
+
+    public async Task<int> MarkAllNotificationsReadAsync(Guid vendorId)
+    {
+        var rows = await _unitOfWork.Settings.GetByCategoryAsync(VendorNotificationCategory);
+        var updated = 0;
+
+        foreach (var setting in rows.Where(x => !x.IsDeleted))
+        {
+            var row = DeserializeOrDefault<VendorNotificationRecord>(setting.Value);
+            if (row == null || row.VendorId != vendorId || row.IsRead)
+            {
+                continue;
+            }
+
+            row.IsRead = true;
+            setting.Value = JsonSerializer.Serialize(row, JsonOptions);
+            setting.UpdatedAt = DateTime.UtcNow;
+            await _unitOfWork.Settings.UpdateAsync(setting);
+            updated++;
+        }
+
+        if (updated > 0)
+        {
+            await AddActivityInternalAsync(vendorId, "notifications_mark_all_read", $"Marked {updated} notifications as read.", null, null);
+            await _unitOfWork.SaveChangesAsync();
+            await _auditService.LogAsync(
+                "Vendor.Notifications.MarkAllRead",
+                "Vendor",
+                null,
+                new { vendorId, updated });
+        }
+
+        return updated;
     }
 
     public async Task ActivateVendorAsync(Guid adminUserId, Guid userId, ActivateVendorRequest request)
@@ -1106,6 +1382,260 @@ public class VendorDomainService
         OrderId = x.OrderId,
         CreatedAtUtc = x.CreatedAtUtc
     };
+
+    public async Task<(byte[] Content, string FileName, string ContentType, long SizeBytes)> ExportOrdersAsync(
+        Guid vendorId,
+        OrderStatus? status,
+        string? search,
+        DateTime? fromDate,
+        DateTime? toDate,
+        bool assignedOnly,
+        string? type)
+    {
+        // reuse the GetOrders filtering approach but fetch all matching orders
+        var ownedProductIds = await GetOwnedProductIdsAsync(vendorId);
+        var assignments = await GetAssignmentsAsync(vendorId);
+        var assignedOrderIds = assignments.Select(x => x.OrderId).ToHashSet();
+
+        var baseOrders = new List<Order>();
+        const int fetchPageSize = 200;
+        var fetchPage = 1;
+        while (true)
+        {
+            var (chunk, totalCount) = await _unitOfWork.Orders.GetPagedAsync(
+                fetchPage,
+                fetchPageSize,
+                null,
+                status,
+                null,
+                fromDate,
+                toDate,
+                search);
+
+            baseOrders.AddRange(chunk);
+            if (baseOrders.Count >= totalCount || !chunk.Any())
+            {
+                break;
+            }
+
+            fetchPage++;
+            if (fetchPage > 200) break;
+        }
+
+        var filtered = baseOrders
+            .Where(o => !o.IsDeleted)
+            .Where(o => assignedOnly
+                ? assignedOrderIds.Contains(o.Id)
+                : o.Items.Any(i => ownedProductIds.Contains(i.ProductId)) || assignedOrderIds.Contains(o.Id))
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(type))
+        {
+            var t = type.Trim().ToLowerInvariant();
+            if (t == "e-commerce" || t == "ecommerce")
+            {
+                filtered = filtered.Where(o => o.Items.Any(i => i.Product != null && i.Product.ProductType == ProductType.PhysicalProduct)).ToList();
+            }
+            else if (t == "renovation" || t == "service")
+            {
+                filtered = filtered.Where(o => o.Items.Any(i => i.Product != null && i.Product.ProductType == ProductType.Service)).ToList();
+            }
+        }
+
+        // Build CSV
+        var sb = new StringBuilder();
+        sb.AppendLine("OrderNumber,CustomerName,CustomerEmail,Type,Status,PaymentStatus,Total,CreatedAt,UpdatedAt,TrackingNumber,Carrier");
+
+        foreach (var o in filtered.OrderByDescending(x => x.CreatedAt))
+        {
+            var customerName = $"{o.User.FirstName} {o.User.LastName}".Trim();
+            var email = o.User?.Email ?? string.Empty;
+            var orderType = o.Items.Any(i => i.Product != null && i.Product.ProductType == ProductType.Service) ? "renovation" : "e-commerce";
+            string Escape(string? v) => v == null ? string.Empty : $"\"{v.Replace("\"", "\"\"")}\"";
+
+            var cols = new[]
+            {
+                Escape(o.OrderNumber),
+                Escape(customerName),
+                Escape(email),
+                Escape(orderType),
+                Escape(o.Status.ToString()),
+                Escape(o.PaymentStatus.ToString()),
+                Escape(o.Total.ToString("F2")),
+                Escape(o.CreatedAt.ToString("o")),
+                Escape(o.UpdatedAt.HasValue ? o.UpdatedAt.Value.ToString("o") : string.Empty),
+                Escape(o.TrackingNumber),
+                Escape(o.AdminNotes)
+            };
+
+            sb.AppendLine(string.Join(',', cols));
+        }
+
+        var content = Encoding.UTF8.GetBytes(sb.ToString());
+        var fileName = $"vendor-orders-{vendorId:N}-{DateTime.UtcNow:yyyyMMddHHmmss}.csv";
+        await _auditService.LogAsync("Vendor.Orders.Export", "Vendor", null, new { vendorId, exported = filtered.Count });
+        return (content, fileName, "text/csv", content.LongLength);
+    }
+
+    public async Task<VendorOrderImportResultDto> ImportOrdersAsync(Guid vendorId, IFormFile file)
+    {
+        var result = new VendorOrderImportResultDto();
+        if (file == null)
+        {
+            result.Success = false;
+            result.Errors.Add("No file provided.");
+            return result;
+        }
+
+        using var sr = new StreamReader(file.OpenReadStream(), Encoding.UTF8);
+        var text = await sr.ReadToEndAsync();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            result.Success = false;
+            result.Errors.Add("File is empty.");
+            return result;
+        }
+
+        var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (lines.Count <= 1)
+        {
+            result.Success = false;
+            result.Errors.Add("No data rows found in CSV.");
+            return result;
+        }
+
+        if (lines.Count - 1 > 5000)
+        {
+            result.Success = false;
+            result.Errors.Add("Row limit exceeded (max 5000).");
+            return result;
+        }
+
+        var header = lines[0].Split(',').Select(h => h.Trim().Trim('"')).ToList();
+        var idx = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < header.Count; i++) idx[header[i]] = i;
+
+        string GetField(string[] parts, string name)
+        {
+            if (!idx.ContainsKey(name)) return string.Empty;
+            var p = idx[name];
+            if (p < 0 || p >= parts.Length) return string.Empty;
+            return parts[p].Trim().Trim('"');
+        }
+
+        for (var r = 1; r < lines.Count; r++)
+        {
+            var raw = lines[r];
+            var parts = raw.Split(',');
+            try
+            {
+                var orderNumber = GetField(parts, "OrderNumber");
+                if (string.IsNullOrWhiteSpace(orderNumber))
+                {
+                    result.Failed++;
+                    result.Errors.Add($"Row {r + 1}: OrderNumber is required.");
+                    continue;
+                }
+
+                var order = await _unitOfWork.Orders.GetByOrderNumberAsync(orderNumber);
+                if (order == null)
+                {
+                    result.Failed++;
+                    result.Errors.Add($"Row {r + 1}: Order {orderNumber} not found.");
+                    continue;
+                }
+
+                try
+                {
+                    await EnsureVendorCanAccessOrderAsync(vendorId, order);
+                }
+                catch
+                {
+                    result.Failed++;
+                    result.Errors.Add($"Row {r + 1}: Order {orderNumber} is outside vendor scope.");
+                    continue;
+                }
+
+                var newStatusRaw = GetField(parts, "NewStatus");
+                var tracking = GetField(parts, "TrackingNumber");
+                var carrier = GetField(parts, "Carrier");
+                var note = GetField(parts, "Note");
+
+                if (!string.IsNullOrWhiteSpace(newStatusRaw))
+                {
+                    if (!Enum.TryParse<OrderStatus>(newStatusRaw, true, out var newStatus))
+                    {
+                        result.Failed++;
+                        result.Errors.Add($"Row {r + 1}: Invalid status '{newStatusRaw}'.");
+                        continue;
+                    }
+
+                    if (!OrderStatusValidator.CanTransition(order.Status, newStatus))
+                    {
+                        result.Failed++;
+                        result.Errors.Add($"Row {r + 1}: Invalid transition from {order.Status} to {newStatus}.");
+                        continue;
+                    }
+
+                    // apply status change similar to UpdateOrderStatusAsync but minimal to avoid duplicating side-effects
+                    var oldStatus = order.Status;
+                    order.Status = newStatus;
+                    if (newStatus == OrderStatus.Cancelled)
+                    {
+                        order.CancelledAt = DateTime.UtcNow;
+                        order.CancellationReason = note;
+                    }
+                    if (newStatus == OrderStatus.Shipped)
+                    {
+                        order.ShippedAt = DateTime.UtcNow;
+                    }
+                    if (newStatus == OrderStatus.Delivered || newStatus == OrderStatus.Completed)
+                    {
+                        order.DeliveredAt = DateTime.UtcNow;
+                    }
+
+                    await _unitOfWork.OrderStatusHistories.AddAsync(new OrderStatusHistory
+                    {
+                        OrderId = order.Id,
+                        OldStatus = oldStatus.ToString(),
+                        NewStatus = newStatus.ToString(),
+                        UpdatedBy = vendorId.ToString(),
+                        Note = note
+                    });
+                }
+
+                if (!string.IsNullOrWhiteSpace(tracking))
+                {
+                    order.TrackingNumber = tracking;
+                }
+
+                if (!string.IsNullOrWhiteSpace(carrier))
+                {
+                    order.AdminNotes = string.IsNullOrWhiteSpace(order.AdminNotes)
+                        ? $"Carrier:{carrier}"
+                        : order.AdminNotes + $";Carrier:{carrier}";
+                }
+
+                if (!string.IsNullOrWhiteSpace(note))
+                {
+                    await AddOrderNoteInternalAsync(vendorId, order.Id, note);
+                }
+
+                await _unitOfWork.Orders.UpdateAsync(order);
+                await _unitOfWork.SaveChangesAsync();
+                result.Imported++;
+            }
+            catch (Exception ex)
+            {
+                result.Failed++;
+                result.Errors.Add($"Row {r + 1}: {ex.Message}");
+            }
+        }
+
+        result.Success = result.Failed == 0;
+        await _auditService.LogAsync("Vendor.Orders.Import", "Vendor", null, new { vendorId, imported = result.Imported, failed = result.Failed });
+        return result;
+    }
 
     private static string BuildVendorProfileKey(Guid vendorId) => $"vendor:{vendorId:N}";
     private static string BuildProductOwnershipKey(Guid productId) => $"product:{productId:N}";

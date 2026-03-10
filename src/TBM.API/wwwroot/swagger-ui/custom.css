@@ -1,0 +1,288 @@
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Outfit:wght@400;500;600;700&display=swap");
+
+:root {
+  --tbm-bg-deep: #070d17;
+  --tbm-bg-mid: #101d2f;
+  --tbm-bg-soft: #172538;
+  --tbm-surface: #f6f8fb;
+  --tbm-card: #ffffff;
+  --tbm-text: #0f1a2b;
+  --tbm-text-muted: #5d6e84;
+  --tbm-red: #e12a35;
+  --tbm-red-deep: #9e1f27;
+  --tbm-blue: #1f416f;
+  --tbm-blue-soft: #2b5e9b;
+  --tbm-line: #d7deea;
+  --tbm-shadow: 0 14px 36px rgba(7, 13, 23, 0.16);
+}
+
+html,
+body {
+  font-family: "Outfit", "Segoe UI", sans-serif;
+  color: var(--tbm-text);
+  background:
+    radial-gradient(circle at 4% -5%, rgba(225, 42, 53, 0.24), transparent 32%),
+    radial-gradient(circle at 96% 2%, rgba(43, 94, 155, 0.2), transparent 36%),
+    linear-gradient(145deg, #e5ebf4 0%, #f6f8fb 52%, #eef3fa 100%);
+}
+
+.swagger-ui {
+  max-width: 1420px;
+}
+
+.swagger-ui .wrapper {
+  max-width: 1340px;
+}
+
+.swagger-ui .topbar {
+  background:
+    linear-gradient(114deg, rgba(7, 13, 23, 0.98) 0%, rgba(16, 29, 47, 0.98) 45%, rgba(31, 65, 111, 0.98) 100%);
+  border-bottom: 2px solid rgba(225, 42, 53, 0.42);
+  box-shadow: 0 10px 34px rgba(7, 13, 23, 0.34);
+  padding: 0.35rem 0;
+}
+
+.swagger-ui .topbar .topbar-wrapper {
+  align-items: center;
+}
+
+.swagger-ui .topbar .download-url-wrapper {
+  display: none;
+}
+
+.swagger-ui .topbar .link {
+  max-width: none;
+  text-decoration: none;
+}
+
+.tbm-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.78rem;
+}
+
+.tbm-brand__logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px rgba(225, 42, 53, 0.35), 0 7px 18px rgba(225, 42, 53, 0.2);
+}
+
+.tbm-brand__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.12;
+}
+
+.tbm-brand__title {
+  font-family: "Archivo", "Segoe UI", sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #eef3ff;
+}
+
+.tbm-brand__sub {
+  font-size: 0.7rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(202, 218, 243, 0.84);
+}
+
+.swagger-ui .information-container,
+.swagger-ui .scheme-container {
+  background: transparent;
+}
+
+.swagger-ui .information-container .main {
+  position: relative;
+  background: var(--tbm-card);
+  border: 1px solid var(--tbm-line);
+  border-radius: 20px;
+  box-shadow: var(--tbm-shadow);
+  margin-top: 1.25rem;
+  padding: 1.35rem 1.45rem;
+  overflow: hidden;
+}
+
+.swagger-ui .information-container .main::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, var(--tbm-red), #f04f59 40%, var(--tbm-blue-soft));
+}
+
+.swagger-ui .info .title {
+  font-family: "Archivo", "Segoe UI", sans-serif;
+  font-size: clamp(1.3rem, 1.7vw, 1.72rem);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tbm-bg-deep);
+}
+
+.swagger-ui .info p,
+.swagger-ui .info li,
+.swagger-ui .info table {
+  color: var(--tbm-text-muted);
+}
+
+#tbm-swagger-panel {
+  margin: 1rem 0 1.2rem;
+  border-radius: 14px;
+  border: 1px solid #dae2f0;
+  background:
+    linear-gradient(135deg, rgba(225, 42, 53, 0.08), transparent 48%),
+    linear-gradient(325deg, rgba(31, 65, 111, 0.1), transparent 45%),
+    #f9fbff;
+  padding: 0.95rem 1rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+#tbm-swagger-panel strong {
+  font-family: "Archivo", "Segoe UI", sans-serif;
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--tbm-bg-deep);
+}
+
+#tbm-swagger-panel span {
+  color: #4f6177;
+  font-size: 0.9rem;
+}
+
+.tbm-panel-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tbm-panel-links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0.35rem 0.72rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  text-transform: uppercase;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.tbm-panel-links a:first-child {
+  background: linear-gradient(100deg, var(--tbm-red), #ee434e);
+  color: #fff;
+}
+
+.tbm-panel-links a:last-child {
+  background: linear-gradient(100deg, var(--tbm-blue), var(--tbm-blue-soft));
+  color: #fff;
+}
+
+.tbm-panel-links a:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(13, 22, 39, 0.18);
+}
+
+.swagger-ui .opblock-tag {
+  font-family: "Archivo", "Segoe UI", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.swagger-ui .opblock {
+  border-radius: 14px;
+  border-width: 1px;
+  box-shadow: 0 7px 20px rgba(16, 29, 47, 0.08);
+  overflow: hidden;
+  animation: tbm-rise 220ms ease-out;
+}
+
+.swagger-ui .opblock .opblock-summary {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.swagger-ui .opblock .opblock-summary-path {
+  font-family: "Archivo", "Segoe UI", sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.swagger-ui .opblock .opblock-summary-method {
+  border-radius: 8px;
+}
+
+.swagger-ui .btn {
+  border-radius: 8px;
+  font-family: "Archivo", "Segoe UI", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.swagger-ui .btn.authorize {
+  background: linear-gradient(100deg, var(--tbm-red), #ef3f4a);
+  border-color: transparent;
+  color: #fff;
+}
+
+.swagger-ui .btn.execute {
+  background: linear-gradient(100deg, var(--tbm-blue), #2e6cb2);
+  border-color: transparent;
+  color: #fff;
+}
+
+.swagger-ui .responses-wrapper,
+.swagger-ui .opblock-description-wrapper,
+.swagger-ui .opblock-external-docs-wrapper,
+.swagger-ui .opblock-body pre.microlight {
+  background: #fcfdff;
+}
+
+.swagger-ui table thead tr th,
+.swagger-ui .responses-inner h4,
+.swagger-ui .responses-inner h5 {
+  font-family: "Archivo", "Segoe UI", sans-serif;
+}
+
+@keyframes tbm-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 860px) {
+  .tbm-brand__logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .tbm-brand__title {
+    font-size: 0.82rem;
+    letter-spacing: 0.08em;
+  }
+
+  .tbm-brand__sub {
+    font-size: 0.64rem;
+    letter-spacing: 0.06em;
+  }
+
+  .swagger-ui .information-container .main {
+    border-radius: 16px;
+    padding: 1rem;
+  }
+
+  #tbm-swagger-panel {
+    padding: 0.78rem;
+  }
+}

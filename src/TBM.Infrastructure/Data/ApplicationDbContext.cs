@@ -6,6 +6,7 @@ using TBM.Infrastructure.Data.Configurations;
 using TBM.Core.Entities.AI;
 using TBM.Core.Entities;
 using TBM.Core.Entities.Audit;
+using TBM.Core.Entities.Contact;
 using TBM.Core.Entities.Payments;
 
 
@@ -20,6 +21,15 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<AIProject> AIProjects => Set<AIProject>();
 public DbSet<AIDesign> AIDesigns => Set<AIDesign>();
+public DbSet<AIRenovationEstimate> AIRenovationEstimates => Set<AIRenovationEstimate>();
+public DbSet<AIRenovationEstimateLineItem> AIRenovationEstimateLineItems => Set<AIRenovationEstimateLineItem>();
+public DbSet<AIRenovationEstimateSuggestedProduct> AIRenovationEstimateSuggestedProducts => Set<AIRenovationEstimateSuggestedProduct>();
+public DbSet<AIAssistantSession> AIAssistantSessions => Set<AIAssistantSession>();
+public DbSet<AIAssistantMessage> AIAssistantMessages => Set<AIAssistantMessage>();
+public DbSet<AIAssistantTask> AIAssistantTasks => Set<AIAssistantTask>();
+public DbSet<AIAssistantToolAction> AIAssistantToolActions => Set<AIAssistantToolAction>();
+public DbSet<AIAssistantToolApproval> AIAssistantToolApprovals => Set<AIAssistantToolApproval>();
+public DbSet<AIAssistantToolExecution> AIAssistantToolExecutions => Set<AIAssistantToolExecution>();
 public DbSet<AuditLog> AuditLogs { get; set; }
 
 public DbSet<AIUsage> AIUsages => Set<AIUsage>();
@@ -45,6 +55,7 @@ public DbSet<AIUsage> AIUsages => Set<AIUsage>();
     public DbSet<Setting> Settings { get; set; }
     public DbSet<OrderStatusHistory> OrderStatusHistories { get; set; }
 public DbSet<WebhookEvent> WebhookEvents { get; set; }
+public DbSet<ContactMessage> ContactMessages => Set<ContactMessage>();
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

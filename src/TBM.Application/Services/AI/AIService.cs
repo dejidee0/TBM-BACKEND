@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TBM.Application.DTOs.AI;
+using TBM.Application.Interfaces;
 using TBM.Core.Entities;
 using TBM.Core.Entities.AI;
 using TBM.Core.Enums;
@@ -9,7 +10,7 @@ using TBM.Core.Models.AI;
 
 namespace TBM.Application.Services;
 
-public class AIService
+public class AIService : IAIService
 {
     private const string ProviderMetadataCategory = "AIProviderMetadata";
 
@@ -45,6 +46,33 @@ public class AIService
         await _uow.AIProjects.CreateAsync(project);
         await _uow.SaveChangesAsync();
         return project;
+    }
+
+    public async Task<List<AIProjectListItemDto>> GetUserProjectsAsync(Guid userId)
+    {
+        var projects = await _uow.AIProjects.GetByUserAsync(userId);
+
+        return projects
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(project =>
+            {
+                var activeDesigns = project.Designs
+                    .Where(x => !x.IsDeleted)
+                    .OrderByDescending(x => x.CreatedAt)
+                    .ToList();
+
+                return new AIProjectListItemDto
+                {
+                    Id = project.Id,
+                    Status = project.Status,
+                    GenerationType = project.GenerationType,
+                    ContextLabel = project.ContextLabel,
+                    CreatedAt = project.CreatedAt,
+                    LatestDesignUrl = activeDesigns.FirstOrDefault()?.OutputUrl,
+                    DesignCount = activeDesigns.Count
+                };
+            })
+            .ToList();
     }
 
     public async Task<AIDesign> GenerateImageAsync(Guid userId, GenerateImageDto dto)

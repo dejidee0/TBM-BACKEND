@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore;
 using TBM.Core.Interfaces;
 using TBM.Core.Interfaces.Repositories;
 using TBM.Core.Interfaces.Repositories.AI;
@@ -19,6 +20,8 @@ public class UnitOfWork : IUnitOfWork
     public IAIProjectRepository AIProjects { get; }
     public IAIDesignRepository AIDesigns { get; }
     public IAIUsageRepository AIUsages { get; }
+    public IAIRenovationEstimateRepository AIRenovationEstimates { get; }
+    public IAIAssistantRepository AIAssistant { get; }
     public ISettingRepository Settings { get; }
     public IOrderStatusHistoryRepository OrderStatusHistories { get; }
 
@@ -48,6 +51,8 @@ public class UnitOfWork : IUnitOfWork
         IAIProjectRepository aiProjects,
         IAIDesignRepository aiDesigns,
         IAIUsageRepository aiUsages,
+        IAIRenovationEstimateRepository aiRenovationEstimates,
+        IAIAssistantRepository aiAssistant,
         IWebhookEventRepository webhookEvents,
         IOrderRepository orderRepository)
     {
@@ -66,6 +71,8 @@ public class UnitOfWork : IUnitOfWork
         AIProjects = aiProjects;
         AIDesigns = aiDesigns;
         AIUsages = aiUsages;
+        AIRenovationEstimates = aiRenovationEstimates;
+        AIAssistant = aiAssistant;
         Orders = orderRepository;
         WebhookEvents = webhookEvents;
     }
@@ -113,6 +120,45 @@ public class UnitOfWork : IUnitOfWork
             await _transaction.DisposeAsync();
             _transaction = null;
         }
+    }
+
+    public Task ExecuteInTransactionAsync(Func<Task> operation)
+    {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                await operation();
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
+    }
+
+    public Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> operation)
+    {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var result = await operation();
+                await transaction.CommitAsync();
+                return result;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public void Dispose()

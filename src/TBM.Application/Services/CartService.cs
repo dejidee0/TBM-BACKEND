@@ -210,6 +210,169 @@ public class CartService : ICartService
         
         return ApiResponse<bool>.SuccessResponse(true, "Cart cleared successfully");
     }
+
+    public async Task<ApiResponse<MergeCartResultDto>> MergeGuestCartAsync(Guid userId, MergeCartRequestDto dto)
+    {
+        var warnings = new List<MergeCartWarningDto>();
+        var requestedItems = dto.Items ?? new List<MergeCartItemDto>();
+
+        if (!requestedItems.Any())
+        {
+            var existingCartResult = await GetCartAsync(userId);
+            if (!existingCartResult.Success || existingCartResult.Data == null)
+            {
+                return ApiResponse<MergeCartResultDto>.ErrorResponse(existingCartResult.Message);
+            }
+
+            return ApiResponse<MergeCartResultDto>.SuccessResponse(new MergeCartResultDto
+            {
+                Cart = existingCartResult.Data,
+                Warnings = warnings
+            });
+        }
+
+        try
+        {
+            await _unitOfWork.ExecuteInTransactionAsync(async () =>
+            {
+                var cart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+                if (cart == null)
+                {
+                    cart = new Cart
+                    {
+                        UserId = userId,
+                        ExpiresAt = DateTime.UtcNow.AddDays(30)
+                    };
+
+                    await _unitOfWork.Carts.CreateAsync(cart);
+                    await _unitOfWork.SaveChangesAsync();
+                    cart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+                }
+
+                if (cart == null)
+                {
+                    throw new InvalidOperationException("Unable to initialize cart.");
+                }
+
+                var groupedItems = requestedItems
+                    .Where(x => x.ProductId != Guid.Empty)
+                    .GroupBy(x => x.ProductId)
+                    .Select(group => new
+                    {
+                        ProductId = group.Key,
+                        Quantity = group.Sum(x => x.Quantity)
+                    })
+                    .ToList();
+
+                foreach (var item in groupedItems)
+                {
+                    if (item.Quantity <= 0)
+                    {
+                        warnings.Add(new MergeCartWarningDto
+                        {
+                            ProductId = item.ProductId,
+                            Code = "INVALID_QUANTITY",
+                            Message = "Quantity must be greater than zero.",
+                            RequestedQuantity = item.Quantity
+                        });
+                        continue;
+                    }
+
+                    var product = await _unitOfWork.Products.GetByIdAsync(item.ProductId);
+                    if (product == null || !product.IsActive)
+                    {
+                        warnings.Add(new MergeCartWarningDto
+                        {
+                            ProductId = item.ProductId,
+                            Code = "PRODUCT_UNAVAILABLE",
+                            Message = "Product is unavailable and was skipped.",
+                            RequestedQuantity = item.Quantity
+                        });
+                        continue;
+                    }
+
+                    var existingItem = await _unitOfWork.Carts.GetCartItemAsync(cart.Id, item.ProductId);
+                    var existingQuantity = existingItem?.Quantity ?? 0;
+                    var requestedQuantity = item.Quantity;
+                    var mergedQuantity = existingQuantity + requestedQuantity;
+                    var appliedQuantity = mergedQuantity;
+
+                    if (product.TrackInventory && product.StockQuantity.HasValue)
+                    {
+                        appliedQuantity = Math.Min(mergedQuantity, product.StockQuantity.Value);
+
+                        if (appliedQuantity <= existingQuantity)
+                        {
+                            warnings.Add(new MergeCartWarningDto
+                            {
+                                ProductId = item.ProductId,
+                                Code = "OUT_OF_STOCK",
+                                Message = "No additional stock available for this product.",
+                                RequestedQuantity = requestedQuantity,
+                                AppliedQuantity = existingQuantity
+                            });
+                            continue;
+                        }
+
+                        if (appliedQuantity < mergedQuantity)
+                        {
+                            warnings.Add(new MergeCartWarningDto
+                            {
+                                ProductId = item.ProductId,
+                                Code = "QUANTITY_CAPPED",
+                                Message = $"Quantity capped by stock limit ({product.StockQuantity.Value}).",
+                                RequestedQuantity = mergedQuantity,
+                                AppliedQuantity = appliedQuantity
+                            });
+                        }
+                    }
+
+                    if (existingItem == null)
+                    {
+                        if (appliedQuantity <= 0)
+                        {
+                            continue;
+                        }
+
+                        await _unitOfWork.Carts.AddItemAsync(new CartItem
+                        {
+                            CartId = cart.Id,
+                            ProductId = item.ProductId,
+                            Quantity = appliedQuantity,
+                            UnitPrice = product.Price ?? 0m,
+                            AddedAt = DateTime.UtcNow
+                        });
+                    }
+                    else
+                    {
+                        existingItem.Quantity = appliedQuantity;
+                        existingItem.UnitPrice = product.Price ?? existingItem.UnitPrice;
+                        await _unitOfWork.Carts.UpdateItemAsync(existingItem);
+                    }
+                }
+
+                await _unitOfWork.SaveChangesAsync();
+            });
+
+            var mergedCart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+            if (mergedCart == null)
+            {
+                return ApiResponse<MergeCartResultDto>.ErrorResponse("Unable to load merged cart.");
+            }
+
+            return ApiResponse<MergeCartResultDto>.SuccessResponse(
+                new MergeCartResultDto
+                {
+                    Cart = MapCartToDto(mergedCart),
+                    Warnings = warnings
+                },
+                "Guest cart merged successfully.");
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse<MergeCartResultDto>.ErrorResponse($"Failed to merge guest cart: {ex.Message}");
+        }
+    }
     
     private CartDto MapCartToDto(Cart cart)
     {

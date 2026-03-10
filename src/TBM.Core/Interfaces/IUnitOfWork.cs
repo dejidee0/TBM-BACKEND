@@ -13,6 +13,8 @@ public interface IUnitOfWork : IDisposable
     IAIProjectRepository AIProjects { get; }
     IAIDesignRepository AIDesigns { get; }
     IAIUsageRepository AIUsages { get; }
+    IAIRenovationEstimateRepository AIRenovationEstimates { get; }
+    IAIAssistantRepository AIAssistant { get; }
 
 ISettingRepository Settings { get; }
 IAuditLogRepository AuditLogs { get; }
@@ -35,4 +37,6 @@ IWebhookEventRepository WebhookEvents { get; }
     Task BeginTransactionAsync();
     Task CommitTransactionAsync();
     Task RollbackTransactionAsync();
+    Task ExecuteInTransactionAsync(Func<Task> operation);
+    Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> operation);
 }

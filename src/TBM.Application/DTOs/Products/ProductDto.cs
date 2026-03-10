@@ -33,7 +33,19 @@ public class ProductDto
     
     public List<ProductImageDto> Images { get; set; } = new();
     public string? PrimaryImageUrl { get; set; }
+    public List<ProductCardDto> SimilarProducts { get; set; } = new();
     
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+public class ProductCardDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public decimal? Price { get; set; }
+    public string? Image { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public bool InStock { get; set; }
 }

@@ -1,5 +1,6 @@
 using TBM.Application.DTOs.Auth;
 using TBM.Application.DTOs.Common;
+using TBM.Application.DTOs.Orders;
 using TBM.Application.Helpers;
 using TBM.Application.Interfaces; 
 using TBM.Core.Entities.Users;
@@ -15,12 +16,18 @@ public class AuthService : IAuthService
     private readonly IUnitOfWork _unitOfWork;
     private readonly JwtHelper _jwtHelper;
     private readonly IEmailService _emailService;
+    private readonly ICartService _cartService;
 
-    public AuthService(IUnitOfWork unitOfWork, JwtHelper jwtHelper,IEmailService emailService)
+    public AuthService(
+        IUnitOfWork unitOfWork,
+        JwtHelper jwtHelper,
+        IEmailService emailService,
+        ICartService cartService)
     {
         _unitOfWork = unitOfWork;
         _jwtHelper = jwtHelper;
         _emailService = emailService;
+        _cartService = cartService;
     }
     
     public async Task<ApiResponse<TokenResponseDto>> RegisterAsync(RegisterDto dto)
@@ -211,6 +218,8 @@ await _emailService.SendVerificationEmailAsync(
                 Roles = roles
             }
         };
+
+        await PopulateCartStateAsync(response, user.Id, dto.GuestCartItems);
         
         return ApiResponse<TokenResponseDto>.SuccessResponse(response, "Login successful");
     }
@@ -352,40 +361,6 @@ await _emailService.SendVerificationEmailAsync(
         return ApiResponse<bool>.SuccessResponse(true, "Email verified successfully");
     }
 
-    public async Task<ApiResponse<bool>> VerifyEmailWithCodeAsync(string email, string code)
-    {
-        var user = await _unitOfWork.Users.GetByEmailAsync(email);
-
-        if (user == null)
-        {
-            return ApiResponse<bool>.ErrorResponse("Invalid or expired verification code");
-        }
-
-        if (user.EmailVerified)
-        {
-            return ApiResponse<bool>.SuccessResponse(true, "Email already verified");
-        }
-
-        var isCodeMatch = !string.IsNullOrWhiteSpace(user.EmailVerificationToken) &&
-                          string.Equals(user.EmailVerificationToken, code, StringComparison.OrdinalIgnoreCase);
-        var isCodeValid = user.EmailVerificationTokenExpiry.HasValue &&
-                          user.EmailVerificationTokenExpiry.Value > DateTime.UtcNow;
-
-        if (!isCodeMatch || !isCodeValid)
-        {
-            return ApiResponse<bool>.ErrorResponse("Invalid or expired verification code");
-        }
-
-        user.EmailVerified = true;
-        user.EmailVerificationToken = null;
-        user.EmailVerificationTokenExpiry = null;
-
-        await _unitOfWork.Users.UpdateAsync(user);
-        await _unitOfWork.SaveChangesAsync();
-
-        return ApiResponse<bool>.SuccessResponse(true, "Email verified successfully");
-    }
-
    public async Task<ApiResponse<TokenResponseDto>> AdminLoginAsync(AdminLoginDto dto)
 {
     var user = await _unitOfWork.Users.GetByEmailWithRolesAsync(dto.Email);
@@ -467,6 +442,44 @@ await _emailService.SendVerificationEmailAsync(
         
         return ApiResponse<bool>.SuccessResponse(true, 
             "If the email exists and is unverified, a verification link has been sent.");
+    }
+
+    private async Task PopulateCartStateAsync(
+        TokenResponseDto response,
+        Guid userId,
+        List<MergeCartItemDto>? guestCartItems)
+    {
+        var sanitizedGuestItems = (guestCartItems ?? new List<MergeCartItemDto>())
+            .Where(x => x.ProductId != Guid.Empty && x.Quantity > 0)
+            .ToList();
+
+        if (sanitizedGuestItems.Any())
+        {
+            response.CartMergeAttempted = true;
+
+            var mergeResult = await _cartService.MergeGuestCartAsync(
+                userId,
+                new MergeCartRequestDto
+                {
+                    Items = sanitizedGuestItems
+                });
+
+            response.CartMergeSucceeded = mergeResult.Success && mergeResult.Data != null;
+            response.CartMergeMessage = mergeResult.Message;
+
+            if (mergeResult.Data != null)
+            {
+                response.Cart = mergeResult.Data.Cart;
+                response.CartMergeWarnings = mergeResult.Data.Warnings;
+                return;
+            }
+        }
+
+        var cartResult = await _cartService.GetCartAsync(userId);
+        if (cartResult.Success && cartResult.Data != null)
+        {
+            response.Cart = cartResult.Data;
+        }
     }
 
     

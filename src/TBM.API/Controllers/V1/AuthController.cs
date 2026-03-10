@@ -10,15 +10,16 @@ namespace TBM.API.Controllers.V1;
 [ApiController]
 [EnableRateLimiting("DynamicPolicy")]
 [Route("api/v1/[controller]")]
-[Route("api/[controller]")]
-[Route("[controller]")]
+
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IConfiguration _configuration;
     
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, IConfiguration configuration)
     {
         _authService = authService;
+        _configuration = configuration;
     }
     
     /// <summary>
@@ -98,25 +99,39 @@ public class AuthController : ControllerBase
     /// <summary>
     /// Verify email address with token query OR body payload { email, code }
     /// </summary>
-    [HttpPost("verify-email")]
-    public async Task<IActionResult> VerifyEmail([FromQuery] string? token, [FromBody] VerifyEmailCodeDto? dto)
+    [HttpGet("verify-email")]
+    public async Task<IActionResult> VerifyEmailByToken([FromQuery] string? token)
     {
-        ApiResponse<bool> result;
-
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            result = await _authService.VerifyEmailAsync(token);
-        }
-        else if (dto != null && !string.IsNullOrWhiteSpace(dto.Email) && !string.IsNullOrWhiteSpace(dto.Code))
-        {
-            result = await _authService.VerifyEmailWithCodeAsync(dto.Email, dto.Code);
-        }
-        else
+        if (string.IsNullOrWhiteSpace(token))
         {
             return BadRequest(ApiResponse<bool>.ErrorResponse(
-                "Provide either token query parameter or { email, code } in request body."
+                "Provide token query parameter, e.g. /api/v1/auth/verify-email?token=..."
             ));
         }
+
+        var result = await _authService.VerifyEmailAsync(token);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Verify email address with token query parameter
+    /// </summary>
+    [HttpPost("verify-email")]
+    public async Task<IActionResult> VerifyEmail([FromQuery] string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return BadRequest(ApiResponse<bool>.ErrorResponse(
+                "Token query parameter is required. Usage: POST /api/v1/auth/verify-email?token=..."
+            ));
+        }
+        
+        var result = await _authService.VerifyEmailAsync(token);
         
         if (!result.Success)
         {
@@ -167,6 +182,31 @@ public class AuthController : ControllerBase
         // In a stateless JWT system, logout is handled client-side by discarding tokens
         // Optionally, you could invalidate the refresh token in the database here
         return Ok(new { message = "Logged out successfully" });
+    }
+
+    /// <summary>
+    /// Returns configured social auth provider capability flags.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("providers")]
+    public IActionResult GetProviders()
+    {
+        var googleEnabled = _configuration.GetValue<bool>("AuthProviders:Google:Enabled");
+        var appleEnabled = _configuration.GetValue<bool>("AuthProviders:Apple:Enabled");
+
+        return Ok(new
+        {
+            google = new
+            {
+                enabled = googleEnabled,
+                implemented = false
+            },
+            apple = new
+            {
+                enabled = appleEnabled,
+                implemented = false
+            }
+        });
     }
 
     /// <summary>
