@@ -3,6 +3,8 @@ namespace TBM.Application.DTOs.Orders;
 public class MergeCartRequestDto
 {
     public List<MergeCartItemDto> Items { get; set; } = new();
+    public List<MergeCartItemDto> GuestCartItems { get; set; } = new();
+    public List<MergeCartItemDto> CartItems { get; set; } = new();
 }
 
 public class MergeCartItemDto

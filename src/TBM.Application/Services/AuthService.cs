@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using TBM.Application.DTOs.Auth;
 using TBM.Application.DTOs.Common;
 using TBM.Application.DTOs.Orders;
@@ -17,17 +18,20 @@ public class AuthService : IAuthService
     private readonly JwtHelper _jwtHelper;
     private readonly IEmailService _emailService;
     private readonly ICartService _cartService;
+    private readonly ILogger<AuthService> _logger;
 
     public AuthService(
         IUnitOfWork unitOfWork,
         JwtHelper jwtHelper,
         IEmailService emailService,
-        ICartService cartService)
+        ICartService cartService,
+        ILogger<AuthService> logger)
     {
         _unitOfWork = unitOfWork;
         _jwtHelper = jwtHelper;
         _emailService = emailService;
         _cartService = cartService;
+        _logger = logger;
     }
     
     public async Task<ApiResponse<TokenResponseDto>> RegisterAsync(RegisterDto dto)
@@ -219,7 +223,8 @@ await _emailService.SendVerificationEmailAsync(
             }
         };
 
-        await PopulateCartStateAsync(response, user.Id, dto.GuestCartItems);
+        var mergeItems = ResolveMergeItems(dto);
+        await PopulateCartStateAsync(response, user.Id, mergeItems);
         
         return ApiResponse<TokenResponseDto>.SuccessResponse(response, "Login successful");
     }
@@ -449,13 +454,20 @@ await _emailService.SendVerificationEmailAsync(
         Guid userId,
         List<MergeCartItemDto>? guestCartItems)
     {
+        _logger.LogInformation("PopulateCartStateAsync called for userId: {UserId}, guestCartItems count: {Count}", 
+            userId, guestCartItems?.Count ?? 0);
+
         var sanitizedGuestItems = (guestCartItems ?? new List<MergeCartItemDto>())
             .Where(x => x.ProductId != Guid.Empty && x.Quantity > 0)
             .ToList();
 
+        _logger.LogInformation("Sanitized guest items count: {Count}", sanitizedGuestItems.Count);
+
         if (sanitizedGuestItems.Any())
         {
             response.CartMergeAttempted = true;
+            _logger.LogInformation("Calling MergeGuestCartAsync for userId: {UserId} with {Count} items", 
+                userId, sanitizedGuestItems.Count);
 
             var mergeResult = await _cartService.MergeGuestCartAsync(
                 userId,
@@ -464,22 +476,53 @@ await _emailService.SendVerificationEmailAsync(
                     Items = sanitizedGuestItems
                 });
 
+            _logger.LogInformation("MergeGuestCartAsync result: Success={Success}, Message={Message}, HasData={HasData}", 
+                mergeResult.Success, mergeResult.Message, mergeResult.Data != null);
+
             response.CartMergeSucceeded = mergeResult.Success && mergeResult.Data != null;
             response.CartMergeMessage = mergeResult.Message;
 
             if (mergeResult.Data != null)
             {
+                _logger.LogInformation("Merge succeeded, Cart items count: {Count}", mergeResult.Data.Cart.Items.Count);
                 response.Cart = mergeResult.Data.Cart;
                 response.CartMergeWarnings = mergeResult.Data.Warnings;
                 return;
             }
         }
+        else
+        {
+            _logger.LogInformation("No guest cart items to merge, getting existing cart for userId: {UserId}", userId);
+        }
 
         var cartResult = await _cartService.GetCartAsync(userId);
+        _logger.LogInformation("GetCartAsync result: Success={Success}, HasData={HasData}, ItemsCount={Count}", 
+            cartResult.Success, cartResult.Data != null, cartResult.Data?.Items.Count ?? 0);
+        
         if (cartResult.Success && cartResult.Data != null)
         {
             response.Cart = cartResult.Data;
         }
+    }
+
+    private static List<MergeCartItemDto> ResolveMergeItems(LoginDto dto)
+    {
+        if (dto.GuestCartItems?.Any() == true)
+        {
+            return dto.GuestCartItems;
+        }
+
+        if (dto.Items?.Any() == true)
+        {
+            return dto.Items;
+        }
+
+        if (dto.CartItems?.Any() == true)
+        {
+            return dto.CartItems;
+        }
+
+        return new List<MergeCartItemDto>();
     }
 
     

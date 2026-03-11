@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TBM.Application.DTOs.Auth;
 using TBM.Application.DTOs.Common;
@@ -138,7 +139,7 @@ public sealed class AuthLoginCartMergeTests
         }));
 
         var unitOfWork = new AuthLoginTestUnitOfWork(new StubUserRepository(user));
-        return new AuthService(unitOfWork, jwtHelper, new StubEmailService(), cartService);
+        return new AuthService(unitOfWork, jwtHelper, new StubEmailService(), cartService, NullLogger<AuthService>.Instance);
     }
 
     private static User BuildUser(string email, string password)

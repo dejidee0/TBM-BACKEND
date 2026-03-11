@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using TBM.Application.DTOs.Common;
 using TBM.Application.DTOs.Orders;
 using TBM.Application.Interfaces;
@@ -9,10 +10,12 @@ namespace TBM.Application.Services;
 public class CartService : ICartService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<CartService> _logger;
     
-    public CartService(IUnitOfWork unitOfWork)
+    public CartService(IUnitOfWork unitOfWork, ILogger<CartService> logger)
     {
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
     
     public async Task<ApiResponse<CartDto>> GetCartAsync(Guid userId)
@@ -213,8 +216,27 @@ public class CartService : ICartService
 
     public async Task<ApiResponse<MergeCartResultDto>> MergeGuestCartAsync(Guid userId, MergeCartRequestDto dto)
     {
+        _logger.LogInformation("MergeGuestCartAsync started for userId: {UserId}", userId);
+        _logger.LogInformation("MergeGuestCartAsync dto: Items={ItemsCount}, GuestCartItems={GuestCount}, CartItems={CartCount}", 
+            dto.Items?.Count ?? 0, dto.GuestCartItems?.Count ?? 0, dto.CartItems?.Count ?? 0);
+
         var warnings = new List<MergeCartWarningDto>();
-        var requestedItems = dto.Items ?? new List<MergeCartItemDto>();
+        List<MergeCartItemDto> requestedItems = new();
+
+        if (dto.Items?.Any() == true)
+        {
+            requestedItems = dto.Items;
+        }
+        else if (dto.GuestCartItems?.Any() == true)
+        {
+            requestedItems = dto.GuestCartItems;
+        }
+        else if (dto.CartItems?.Any() == true)
+        {
+            requestedItems = dto.CartItems;
+        }
+
+        _logger.LogInformation("Total requestedItems count: {Count}", requestedItems.Count);
 
         if (!requestedItems.Any())
         {

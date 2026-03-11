@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using TBM.Application.DTOs.Orders;
 using TBM.Application.Services;
 using TBM.Core.Entities.Orders;
@@ -116,7 +117,7 @@ public sealed class CartMergeServiceTests
         var carts = new CartRepository(context);
         var products = new ProductRepository(context);
         var uow = new CartMergeTestUnitOfWork(context, carts, products);
-        return new CartService(uow);
+        return new CartService(uow, NullLogger<CartService>.Instance);
     }
 
     private static ApplicationDbContext BuildContext(string testName)
