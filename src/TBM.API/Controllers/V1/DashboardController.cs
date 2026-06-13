@@ -25,7 +25,7 @@ public class DashboardController : ControllerBase
         _store = store;
     }
 
-    [HttpGet("~/api/dashboard/recent-order")]
+    [HttpGet("recent-order")]
     public async Task<IActionResult> RecentOrder()
     {
         var userId = GetUserId();
@@ -49,7 +49,7 @@ public class DashboardController : ControllerBase
         });
     }
 
-    [HttpGet("~/api/dashboard/latest-design")]
+    [HttpGet("latest-design")]
     public async Task<IActionResult> LatestDesign()
     {
         var userId = GetUserId();
@@ -75,7 +75,7 @@ public class DashboardController : ControllerBase
         });
     }
 
-    [HttpGet("~/api/dashboard/consultations")]
+    [HttpGet("consultations")]
     public IActionResult Consultations()
     {
         return Ok(new
@@ -86,7 +86,7 @@ public class DashboardController : ControllerBase
         });
     }
 
-    [HttpGet("~/api/dashboard/saved-items")]
+    [HttpGet("saved-items")]
     public async Task<IActionResult> SavedPreview()
     {
         var userId = GetUserId();
@@ -104,7 +104,7 @@ public class DashboardController : ControllerBase
         });
     }
 
-    [HttpGet("~/api/dashboard/orders/{orderId:guid}/tracking")]
+    [HttpGet("orders/{orderId:guid}/tracking")]
     public async Task<IActionResult> Tracking(Guid orderId)
     {
         var userId = GetUserId();

@@ -30,13 +30,37 @@ public class ProductDto
     public bool IsFeatured { get; set; }
     
     public string? Tags { get; set; }
-    
+    public string? AIKeywords { get; set; }
+    public string? MaterialType { get; set; }
+    public string? QualityTier { get; set; }
+    public string? RecommendedFor { get; set; }
+
+    // Rich product content (deserialized from JSON)
+    public List<SpecificationItemDto>? Specifications { get; set; }
+    public List<string>? KeyFeatures { get; set; }
+    public List<string>? WhatsIncluded { get; set; }
+    public List<string>? WhatsNotIncluded { get; set; }
+
+    // Structured attributes
+    public string? Dimensions { get; set; }
+    public string? Warranty { get; set; }
+    public string? FinishType { get; set; }
+    public string? InstallationType { get; set; }
+    public string? Material { get; set; }
+    public string? Color { get; set; }
+
     public List<ProductImageDto> Images { get; set; } = new();
     public string? PrimaryImageUrl { get; set; }
     public List<ProductCardDto> SimilarProducts { get; set; } = new();
     
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+public class SpecificationItemDto
+{
+    public string Key { get; set; } = string.Empty;
+    public string Value { get; set; } = string.Empty;
 }
 
 public class ProductCardDto

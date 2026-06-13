@@ -15,8 +15,10 @@ namespace TBM.API.Swagger
             if (!hasFileUpload)
                 return;
 
-            // 🔴 IMPORTANT: remove auto-generated parameters
-            operation.Parameters.Clear();
+            // Keep real route/query parameters and remove only the synthetic file parameter.
+            operation.Parameters = (operation.Parameters ?? Enumerable.Empty<OpenApiParameter>())
+                .Where(p => !string.Equals(p.Name, "file", StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
             operation.RequestBody = new OpenApiRequestBody
             {

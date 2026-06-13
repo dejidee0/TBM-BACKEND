@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using TBM.Application.DTOs.Admin;
+using TBM.Application.Helpers;
 using TBM.Core.Enums;
 using TBM.Core.Interfaces;
 
@@ -39,22 +40,26 @@ public class AdminDashboardService
         var fromUtc = ResolveFromUtc(timeRange, now);
 
         var totalRevenue = await _unitOfWork.Orders.GetTotalSalesAsync(fromUtc, now);
-        var monthStart = new DateTime(now.Year, now.Month, 1);
+        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var monthlyRecurring = await _unitOfWork.Orders.GetTotalSalesAsync(monthStart, now);
 
-        var monthsWindow = Math.Clamp(
-            (int)Math.Ceiling((now - fromUtc).TotalDays / 30d),
-            1,
-            24);
+        var startMonth = new DateTime(fromUtc.Year, fromUtc.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var endMonth = monthStart;
+        var monthsWindow = DateRangeHelper.GetMonthSpanInclusive(startMonth, endMonth);
+        monthsWindow = Math.Clamp(monthsWindow, 1, 24);
+        if (monthsWindow < DateRangeHelper.GetMonthSpanInclusive(startMonth, endMonth))
+        {
+            startMonth = endMonth.AddMonths(-(monthsWindow - 1));
+        }
 
         var series = await _unitOfWork.Orders.GetMonthlyRevenueAsync(monthsWindow);
-        var chartData = series
-            .Where(x => new DateTime(x.Year, x.Month, 1) >= new DateTime(fromUtc.Year, fromUtc.Month, 1))
-            .Select(x => new AdminRevenueChartPointDto
+        var lookup = series.ToDictionary(x => (x.Year, x.Month), x => x.Revenue);
+        var chartData = DateRangeHelper.GetMonthStartsUtc(startMonth, endMonth)
+            .Select(m => new AdminRevenueChartPointDto
             {
-                Year = x.Year,
-                Month = x.Month,
-                Revenue = x.Revenue
+                Year = m.Year,
+                Month = m.Month,
+                Revenue = lookup.TryGetValue((m.Year, m.Month), out var revenue) ? revenue : 0m
             })
             .ToList();
 

@@ -7,6 +7,7 @@ public class AIProjectListItemDto
     public Guid Id { get; set; }
     public AIProjectStatus Status { get; set; }
     public AIGenerationType GenerationType { get; set; }
+    public AIOutputType OutputType { get; set; }
     public string? ContextLabel { get; set; }
     public DateTime CreatedAt { get; set; }
     public string? LatestDesignUrl { get; set; }

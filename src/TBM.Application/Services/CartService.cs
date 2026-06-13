@@ -37,8 +37,78 @@ public class CartService : ICartService
         
         return ApiResponse<CartDto>.SuccessResponse(MapCartToDto(cart));
     }
+
+    public async Task<ApiResponse<CartDto>> GetGuestCartAsync(string guestSessionId)
+    {
+        if (string.IsNullOrWhiteSpace(guestSessionId))
+        {
+            return ApiResponse<CartDto>.ErrorResponse("Guest session is required");
+        }
+
+        var cart = await _unitOfWork.Carts.GetByGuestSessionIdAsync(guestSessionId);
+
+        if (cart == null)
+        {
+            cart = new Cart
+            {
+                GuestSessionId = guestSessionId,
+                ExpiresAt = DateTime.UtcNow.AddDays(30)
+            };
+
+            await _unitOfWork.Carts.CreateAsync(cart);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        return ApiResponse<CartDto>.SuccessResponse(MapCartToDto(cart));
+    }
     
     public async Task<ApiResponse<CartDto>> AddToCartAsync(Guid userId, AddToCartDto dto)
+    {
+        return await AddToCartInternalAsync(
+            () => _unitOfWork.Carts.GetByUserIdAsync(userId),
+            async () =>
+            {
+                var cart = new Cart
+                {
+                    UserId = userId,
+                    ExpiresAt = DateTime.UtcNow.AddDays(30)
+                };
+
+                await _unitOfWork.Carts.CreateAsync(cart);
+                await _unitOfWork.SaveChangesAsync();
+                return await _unitOfWork.Carts.GetByUserIdAsync(userId);
+            },
+            dto);
+    }
+
+    public async Task<ApiResponse<CartDto>> AddToGuestCartAsync(string guestSessionId, AddToCartDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(guestSessionId))
+        {
+            return ApiResponse<CartDto>.ErrorResponse("Guest session is required");
+        }
+
+        return await AddToCartInternalAsync(
+            () => _unitOfWork.Carts.GetByGuestSessionIdAsync(guestSessionId),
+            async () =>
+            {
+                var cart = new Cart
+                {
+                    GuestSessionId = guestSessionId,
+                    ExpiresAt = DateTime.UtcNow.AddDays(30)
+                };
+
+                await _unitOfWork.Carts.CreateAsync(cart);
+                await _unitOfWork.SaveChangesAsync();
+                return await _unitOfWork.Carts.GetByGuestSessionIdAsync(guestSessionId);
+            },
+            dto);
+    }
+
+    private async Task<ApiResponse<CartDto>> AddToCartInternalAsync(
+        Func<Task<Cart?>> getCart,
+        Func<Task<Cart?>> createCart,
+        AddToCartDto dto)
     {
         // Validate quantity
         if (dto.Quantity <= 0)
@@ -47,21 +117,16 @@ public class CartService : ICartService
         }
         
         // Get or create cart
-        var cart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+        var cart = await getCart();
         
         if (cart == null)
         {
-            cart = new Cart
-            {
-                UserId = userId,
-                ExpiresAt = DateTime.UtcNow.AddDays(30)
-            };
-            
-            await _unitOfWork.Carts.CreateAsync(cart);
-            await _unitOfWork.SaveChangesAsync();
-            
-            // Reload to get ID
-            cart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+            cart = await createCart();
+        }
+
+        if (cart == null)
+        {
+            return ApiResponse<CartDto>.ErrorResponse("Unable to initialize cart");
         }
         
         // Get product
@@ -124,7 +189,7 @@ public class CartService : ICartService
         await _unitOfWork.SaveChangesAsync();
         
         // Reload cart with items
-        cart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+        cart = await getCart();
         
         return ApiResponse<CartDto>.SuccessResponse(
             MapCartToDto(cart!),
@@ -134,12 +199,36 @@ public class CartService : ICartService
     
     public async Task<ApiResponse<CartDto>> UpdateCartItemAsync(Guid userId, Guid itemId, UpdateCartItemDto dto)
     {
-        if (dto.Quantity <= 0)
+        return await UpdateCartItemInternalAsync(
+            () => _unitOfWork.Carts.GetByUserIdAsync(userId),
+            itemId,
+            dto.Quantity);
+    }
+
+    public async Task<ApiResponse<CartDto>> UpdateGuestCartItemAsync(string guestSessionId, Guid itemId, int quantity)
+    {
+        if (string.IsNullOrWhiteSpace(guestSessionId))
+        {
+            return ApiResponse<CartDto>.ErrorResponse("Guest session is required");
+        }
+
+        return await UpdateCartItemInternalAsync(
+            () => _unitOfWork.Carts.GetByGuestSessionIdAsync(guestSessionId),
+            itemId,
+            quantity);
+    }
+
+    private async Task<ApiResponse<CartDto>> UpdateCartItemInternalAsync(
+        Func<Task<Cart?>> getCart,
+        Guid itemId,
+        int quantity)
+    {
+        if (quantity <= 0)
         {
             return ApiResponse<CartDto>.ErrorResponse("Quantity must be greater than zero");
         }
         
-        var cart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+        var cart = await getCart();
         
         if (cart == null)
         {
@@ -158,18 +247,18 @@ public class CartService : ICartService
         
         if (product != null && product.TrackInventory && product.StockQuantity.HasValue)
         {
-            if (product.StockQuantity.Value < dto.Quantity)
+            if (product.StockQuantity.Value < quantity)
             {
                 return ApiResponse<CartDto>.ErrorResponse($"Only {product.StockQuantity.Value} items available in stock");
             }
         }
         
-        item.Quantity = dto.Quantity;
+        item.Quantity = quantity;
         await _unitOfWork.Carts.UpdateItemAsync(item);
         await _unitOfWork.SaveChangesAsync();
         
         // Reload cart
-        cart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+        cart = await getCart();
         
         return ApiResponse<CartDto>.SuccessResponse(
             MapCartToDto(cart!),
@@ -179,7 +268,28 @@ public class CartService : ICartService
     
     public async Task<ApiResponse<bool>> RemoveCartItemAsync(Guid userId, Guid itemId)
     {
-        var cart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+        return await RemoveCartItemInternalAsync(
+            () => _unitOfWork.Carts.GetByUserIdAsync(userId),
+            itemId);
+    }
+
+    public async Task<ApiResponse<bool>> RemoveGuestCartItemAsync(string guestSessionId, Guid itemId)
+    {
+        if (string.IsNullOrWhiteSpace(guestSessionId))
+        {
+            return ApiResponse<bool>.ErrorResponse("Guest session is required");
+        }
+
+        return await RemoveCartItemInternalAsync(
+            () => _unitOfWork.Carts.GetByGuestSessionIdAsync(guestSessionId),
+            itemId);
+    }
+
+    private async Task<ApiResponse<bool>> RemoveCartItemInternalAsync(
+        Func<Task<Cart?>> getCart,
+        Guid itemId)
+    {
+        var cart = await getCart();
         
         if (cart == null)
         {
@@ -201,7 +311,22 @@ public class CartService : ICartService
     
     public async Task<ApiResponse<bool>> ClearCartAsync(Guid userId)
     {
-        var cart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+        return await ClearCartInternalAsync(() => _unitOfWork.Carts.GetByUserIdAsync(userId));
+    }
+
+    public async Task<ApiResponse<bool>> ClearGuestCartAsync(string guestSessionId)
+    {
+        if (string.IsNullOrWhiteSpace(guestSessionId))
+        {
+            return ApiResponse<bool>.ErrorResponse("Guest session is required");
+        }
+
+        return await ClearCartInternalAsync(() => _unitOfWork.Carts.GetByGuestSessionIdAsync(guestSessionId));
+    }
+
+    private async Task<ApiResponse<bool>> ClearCartInternalAsync(Func<Task<Cart?>> getCart)
+    {
+        var cart = await getCart();
         
         if (cart == null)
         {
@@ -418,6 +543,7 @@ public class CartService : ICartService
         {
             Id = cart.Id,
             UserId = cart.UserId,
+            GuestSessionId = cart.GuestSessionId,
             Items = items,
             TotalItems = items.Sum(i => i.Quantity),
             SubTotal = items.Sum(i => i.SubTotal),

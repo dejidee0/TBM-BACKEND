@@ -1,3 +1,4 @@
+using TBM.Application.DTOs.AI;
 using TBM.Application.DTOs.Common;
 using TBM.Application.DTOs.Products;
 
@@ -28,4 +29,11 @@ public interface IProductService
     Task<ApiResponse<ProductImageDto>> AddProductImageAsync(Guid productId, AddProductImageDto dto);
     Task<ApiResponse<bool>> DeleteProductImageAsync(Guid imageId);
     Task<ApiResponse<bool>> SetPrimaryImageAsync(Guid productId, Guid imageId);
+
+    // AI product matching — surfaces Bogat inventory items relevant to a generated design
+    Task<List<MatchedProductDto>> SearchByAIKeywordsAsync(string prompt, List<string>? contextTags, int limit = 8);
+
+    // Bulk operations
+    Task<ApiResponse<BulkCreateProductResultDto>> BulkCreateProductsAsync(List<CreateProductDto> products);
+    Task<ApiResponse<ImportResultDto>> ImportProductsAsync(Stream fileStream, string fileName);
 }

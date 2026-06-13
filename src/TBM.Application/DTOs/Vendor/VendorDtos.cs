@@ -26,11 +26,10 @@ public class VendorAlertDto
 public class VendorActivityDto
 {
     public string Id { get; set; } = string.Empty;
+    public string Customer { get; set; } = string.Empty;
     public string ActivityType { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public Guid? OrderId { get; set; }
-    public Guid? ProductId { get; set; }
     public DateTime CreatedAtUtc { get; set; }
+    public string Status { get; set; } = string.Empty;
 }
 
 public class VendorOrderListItemDto

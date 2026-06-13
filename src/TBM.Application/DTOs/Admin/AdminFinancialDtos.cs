@@ -16,7 +16,8 @@ public class AdminFinancialTransactionDto
 {
     public Guid Id { get; set; }
     public string OrderNumber { get; set; } = string.Empty;
-    public Guid UserId { get; set; }
+    public Guid? UserId { get; set; }
+    public bool IsGuestOrder { get; set; }
     public string CustomerName { get; set; } = string.Empty;
     public string CustomerEmail { get; set; } = string.Empty;
     public decimal Amount { get; set; }

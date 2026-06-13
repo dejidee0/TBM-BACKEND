@@ -31,7 +31,7 @@ public sealed class OpenApiContractTests : IClassFixture<ApiContractFactory>
         Assert.Contains("/api/v1/auth/register", paths);
         Assert.Contains("/api/v1/checkout/payment", paths);
         Assert.Contains("/api/v1/checkout/payment/paystack/verify/{reference}", paths);
-        Assert.Contains("/api/webhooks/paystack", paths);
+        Assert.Contains("/api/v1/webhooks/paystack", paths);
         Assert.Contains("/api/v1/ai/generate/image", paths);
         Assert.Contains("/api/v1/materials", paths);
         Assert.Contains("/api/v1/materials/{idorslug}", paths);
@@ -42,7 +42,7 @@ public sealed class OpenApiContractTests : IClassFixture<ApiContractFactory>
         Assert.Contains("/api/v1/auth/providers", paths);
         Assert.Contains("/api/v1/vendor/orders/export", paths);
         Assert.Contains("/api/v1/vendor/orders/import", paths);
-        Assert.Contains("/api/admin/observability/slo/overview", paths);
+        Assert.Contains("/api/v1/admin/observability/slo/overview", paths);
 
         var securitySchemes = root
             .GetProperty("components")

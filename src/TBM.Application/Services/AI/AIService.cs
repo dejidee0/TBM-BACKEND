@@ -1,6 +1,7 @@
 using System.Text.Json;
 using TBM.Application.DTOs.AI;
 using TBM.Application.Interfaces;
+using TBM.Application.Services.Subscriptions;
 using TBM.Core.Entities;
 using TBM.Core.Entities.AI;
 using TBM.Core.Enums;
@@ -18,28 +19,35 @@ public class AIService : IAIService
     private readonly IAIProvider _provider;
     private readonly AIGeneratedMediaService _generatedMediaService;
     private readonly AICreditService _creditService;
+    private readonly SubscriptionService _subscriptionService;
 
     public AIService(
         IUnitOfWork uow,
         IAIProvider provider,
         AIGeneratedMediaService generatedMediaService,
-        AICreditService creditService)
+        AICreditService creditService,
+        SubscriptionService subscriptionService)
     {
         _uow = uow;
         _provider = provider;
         _generatedMediaService = generatedMediaService;
         _creditService = creditService;
+        _subscriptionService = subscriptionService;
     }
 
     public async Task<AIProject> CreateProjectAsync(Guid userId, CreateAIProjectDto dto)
     {
+        var sourceImageUrl = RequireText(dto.SourceImageUrl, "sourceImageUrl is required when creating an AI project.");
+        var prompt = RequireText(dto.Prompt, "prompt is required when creating an AI project.");
+        var generationType = ResolveGenerationType(dto);
+
         var project = new AIProject
         {
             UserId = userId,
-            SourceImageUrl = dto.SourceImageUrl,
-            GenerationType = dto.GenerationType,
-            Prompt = dto.Prompt,
-            ContextLabel = dto.ContextLabel,
+            SourceImageUrl = sourceImageUrl,
+            GenerationType = generationType,
+            Prompt = prompt,
+            ContextLabel = NormalizeText(dto.ContextLabel),
             Status = AIProjectStatus.Pending
         };
 
@@ -66,6 +74,7 @@ public class AIService : IAIService
                     Id = project.Id,
                     Status = project.Status,
                     GenerationType = project.GenerationType,
+                    OutputType = MapGenerationTypeToOutputType(project.GenerationType),
                     ContextLabel = project.ContextLabel,
                     CreatedAt = project.CreatedAt,
                     LatestDesignUrl = activeDesigns.FirstOrDefault()?.OutputUrl,
@@ -83,21 +92,24 @@ public class AIService : IAIService
             throw new InvalidOperationException("Project generation type does not support image generation.");
         }
 
-        var sourceImageUrl = string.IsNullOrWhiteSpace(dto.SourceImageUrl)
-            ? project.SourceImageUrl
-            : dto.SourceImageUrl;
+        var prompt = ResolvePrompt(dto.Prompt, project, "image generation");
+        var enrichedPrompt = EnrichPromptWithTags(prompt, dto.ContextTags);
+        var sourceImageUrl = ResolveSourceImageUrl(dto.SourceImageUrl, project, "image generation");
 
-        await _creditService.DeductForGenerationAsync(userId, AIGenerationType.ImageToImage, project.Id);
+        // Subscription gate — throws SubscriptionQuotaException if user has no active plan or quota exceeded
+        await _subscriptionService.CheckAndIncrementQuotaAsync(userId);
 
         var designCommitted = false;
         try
         {
+            project.Prompt = prompt;
+            project.SourceImageUrl = sourceImageUrl;
             project.Status = AIProjectStatus.Processing;
             await _uow.SaveChangesAsync();
 
             var providerResult = await _provider.GenerateImageAsync(new AIImageRequest
             {
-                Prompt = dto.Prompt,
+                Prompt = enrichedPrompt,
                 ImageUrl = sourceImageUrl
             });
 
@@ -152,6 +164,7 @@ public class AIService : IAIService
             if (!designCommitted)
             {
                 await TryRefundCreditsAsync(userId, AIGenerationType.ImageToImage, project.Id, "Image generation failed");
+                // Note: subscription quota increment was already done optimistically above; no rollback needed
                 await MarkProjectFailedAsync(project);
                 await TryRecordFailedUsageAsync(userId, project.Id, AIGenerationType.ImageToImage);
             }
@@ -168,19 +181,27 @@ public class AIService : IAIService
             throw new InvalidOperationException("Project generation type does not support video generation.");
         }
 
-        await _creditService.DeductForGenerationAsync(userId, AIGenerationType.ImageToVideo, project.Id);
+        var prompt = ResolvePrompt(dto.Prompt, project, "video generation");
+        var enrichedPrompt = EnrichPromptWithTags(prompt, dto.ContextTags);
+        var sourceImageUrl = ResolveSourceImageUrl(dto.SourceImageUrl, project, "video generation");
+        var durationSeconds = ResolveDurationSeconds(dto.DurationSeconds);
+
+        // Subscription gate — throws SubscriptionQuotaException if user has no active plan or quota exceeded
+        await _subscriptionService.CheckAndIncrementQuotaAsync(userId);
 
         var designCommitted = false;
         try
         {
+            project.Prompt = prompt;
+            project.SourceImageUrl = sourceImageUrl;
             project.Status = AIProjectStatus.Processing;
             await _uow.SaveChangesAsync();
 
             var providerResult = await _provider.GenerateVideoAsync(new AIVideoRequest
             {
-                Prompt = dto.Prompt,
-                ImageUrl = dto.SourceImageUrl ?? project.SourceImageUrl,
-                DurationSeconds = dto.DurationSeconds
+                Prompt = enrichedPrompt,
+                ImageUrl = sourceImageUrl,
+                DurationSeconds = durationSeconds
             });
 
             if (!providerResult.Success || string.IsNullOrWhiteSpace(providerResult.OutputUrl))
@@ -200,7 +221,7 @@ public class AIService : IAIService
                 OutputType = AIOutputType.Video,
                 Provider = _provider.ProviderName,
                 ProviderJobId = providerResult.ProviderJobId,
-                DurationSeconds = dto.DurationSeconds,
+                DurationSeconds = durationSeconds,
                 Width = 1280,
                 Height = 720
             };
@@ -252,6 +273,116 @@ public class AIService : IAIService
         }
 
         return project;
+    }
+
+    private static AIGenerationType ResolveGenerationType(CreateAIProjectDto dto)
+    {
+        if (dto.OutputType.HasValue)
+        {
+            var resolvedFromOutputType = MapOutputTypeToGenerationType(dto.OutputType.Value);
+            if (dto.GenerationType.HasValue && dto.GenerationType.Value != resolvedFromOutputType)
+            {
+                throw new InvalidOperationException("outputType and generationType do not match.");
+            }
+
+            return resolvedFromOutputType;
+        }
+
+        if (!dto.GenerationType.HasValue)
+        {
+            throw new InvalidOperationException("outputType is required when creating an AI project.");
+        }
+
+        return dto.GenerationType.Value;
+    }
+
+    private static string ResolvePrompt(string? requestedPrompt, AIProject project, string operationName)
+    {
+        var prompt = NormalizeText(requestedPrompt) ?? NormalizeText(project.Prompt);
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            throw new InvalidOperationException($"prompt is required for {operationName}.");
+        }
+
+        return prompt;
+    }
+
+    private static string ResolveSourceImageUrl(string? requestedSourceImageUrl, AIProject project, string operationName)
+    {
+        var sourceImageUrl = NormalizeText(requestedSourceImageUrl) ?? NormalizeText(project.SourceImageUrl);
+        if (string.IsNullOrWhiteSpace(sourceImageUrl))
+        {
+            throw new InvalidOperationException($"sourceImageUrl is required for {operationName}.");
+        }
+
+        return sourceImageUrl;
+    }
+
+    private static int ResolveDurationSeconds(int durationSeconds)
+    {
+        if (durationSeconds <= 0)
+        {
+            throw new InvalidOperationException("durationSeconds must be greater than zero.");
+        }
+
+        return durationSeconds;
+    }
+
+    private static string RequireText(string? value, string message)
+    {
+        var normalized = NormalizeText(value);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new InvalidOperationException(message);
+        }
+
+        return normalized;
+    }
+
+    private static string? NormalizeText(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string EnrichPromptWithTags(string prompt, List<string>? contextTags)
+    {
+        if (contextTags == null || contextTags.Count == 0)
+        {
+            return prompt;
+        }
+
+        var tags = contextTags
+            .Select(t => t?.Trim())
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (tags.Count == 0)
+        {
+            return prompt;
+        }
+
+        return $"{prompt}. Style context: {string.Join(", ", tags)}.";
+    }
+
+    private static AIGenerationType MapOutputTypeToGenerationType(AIOutputType outputType)
+    {
+        return outputType switch
+        {
+            AIOutputType.Image => AIGenerationType.ImageToImage,
+            AIOutputType.Video => AIGenerationType.ImageToVideo,
+            _ => throw new InvalidOperationException("Unsupported outputType.")
+        };
+    }
+
+    private static AIOutputType MapGenerationTypeToOutputType(AIGenerationType generationType)
+    {
+        return generationType switch
+        {
+            AIGenerationType.ImageToImage => AIOutputType.Image,
+            AIGenerationType.ImageToVideo => AIOutputType.Video,
+            _ => throw new InvalidOperationException("Unsupported generationType.")
+        };
     }
 
     private Setting BuildProviderMetadataSetting(

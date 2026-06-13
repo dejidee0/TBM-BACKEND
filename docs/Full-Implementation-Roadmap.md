@@ -2,7 +2,7 @@
 
 Generated on: February 21, 2026  
 Inputs:
-- `docs/TBM-API-Documentation.md`
+- `docs/TBM-API-Documentation.txt`
 - `docs/Frontend-Backend-Alignment-Report.md`
 - `docs/frontend-backend-alignment-matrix.csv`
 - `docs/frontend doc.md`

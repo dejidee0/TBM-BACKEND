@@ -7,6 +7,7 @@ public class ProductImage : BaseEntity
     public Guid ProductId { get; set; }
     public string ImageUrl { get; set; } = string.Empty;
     public string? AltText { get; set; }
+    public string? ViewType { get; set; } // e.g., Front, Side, Top, Angle, Lifestyle, Dimensions
     public int DisplayOrder { get; set; }
     public bool IsPrimary { get; set; }
     

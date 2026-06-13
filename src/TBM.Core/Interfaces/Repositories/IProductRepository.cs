@@ -26,5 +26,9 @@ public interface IProductRepository
     Task DeleteAsync(Guid id);
     Task<bool> SlugExistsAsync(string slug, Guid? excludeId = null);
     Task<bool> SKUExistsAsync(string sku, Guid? excludeId = null);
+    Task<List<Product>> GetInventoryCandidatesAsync();
     Task UpdateStockAsync(Guid productId, int quantity);
+    Task<int> UpdateStockAtomicAsync(Guid productId, int quantityToSubtract);
+    Task<List<Product>> SearchByAIKeywordsAsync(IEnumerable<string> keywords, int limit = 8);
+    Task<List<Product>> BulkCreateAsync(IEnumerable<Product> products);
 }

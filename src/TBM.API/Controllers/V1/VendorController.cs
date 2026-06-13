@@ -17,7 +17,7 @@ public class VendorController : ControllerBase
     public VendorController(VendorDomainService vendorService)
     {
         _vendorService = vendorService;
-    }
+    }                                                                                                                                                                                                                                                                                                        
 
     [HttpGet("dashboard")]
     public async Task<IActionResult> GetDashboard()
@@ -35,11 +35,17 @@ public class VendorController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("activity")]
-    public async Task<IActionResult> GetActivity([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+[HttpGet("activity")]
+    public async Task<IActionResult> GetActivity([FromQuery] string? filter = "all", [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
     {
+        ActivityFilter parsedFilter = ActivityFilter.All;
+        if (!string.IsNullOrEmpty(filter) && !Enum.TryParse<ActivityFilter>(filter, true, out parsedFilter))
+        {
+            return BadRequest(new { error = $"Invalid filter '{filter}'. Valid values: all, orders, projects." });
+        }
+
         var vendorId = GetVendorId();
-        var result = await _vendorService.GetActivityAsync(vendorId, NormalizePage(page), NormalizePageSize(pageSize));
+        var result = await _vendorService.GetActivityAsync(vendorId, NormalizePage(page), NormalizePageSize(pageSize), parsedFilter);
         return Ok(result);
     }
 
@@ -211,7 +217,8 @@ public class VendorController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("~/api/inventory/stats")]
+    [HttpGet("inventory/stats")]
+    [HttpGet("~/api/v1/inventory/stats")]
     public async Task<IActionResult> GetInventoryStats()
     {
         var vendorId = GetVendorId();
@@ -219,7 +226,8 @@ public class VendorController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPost("~/api/inventory/products")]
+    [HttpPost("inventory/products")]
+    [HttpPost("~/api/v1/inventory/products")]
     public async Task<IActionResult> CreateInventoryProduct([FromBody] VendorInventoryCreateRequest request)
     {
         try
@@ -257,7 +265,8 @@ public class VendorController : ControllerBase
         }
     }
 
-    [HttpDelete("~/api/inventory/products/{productId:guid}")]
+    [HttpDelete("inventory/products/{productId:guid}")]
+    [HttpDelete("~/api/v1/inventory/products/{productId:guid}")]
     public async Task<IActionResult> DeleteInventoryProduct(Guid productId)
     {
         try
@@ -348,7 +357,8 @@ public class VendorController : ControllerBase
         }
     }
 
-    [HttpPut("~/api/notifications/mark-all-read")]
+    [HttpPut("notifications/mark-all-read")]
+    [HttpPut("~/api/v1/notifications/mark-all-read")]
     public async Task<IActionResult> MarkAllNotificationsRead()
     {
         var vendorId = GetVendorId();

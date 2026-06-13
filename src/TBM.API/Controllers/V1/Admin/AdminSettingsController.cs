@@ -7,7 +7,7 @@ using TBM.Application.Services;
 
 
 [ApiController]
-[Route("api/admin/settings")]
+[Route("api/v1/admin/settings")]
 [Authorize(Roles = "Admin,SuperAdmin")]
 [EnableRateLimiting("DynamicPolicy")]
 

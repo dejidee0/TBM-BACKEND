@@ -108,4 +108,15 @@ public class AIAssistantRepository : IAIAssistantRepository
             .OrderByDescending(x => x.CreatedAt)
             .FirstOrDefaultAsync();
     }
+
+    public async Task<bool> DeleteSessionAsync(Guid sessionId, Guid userId)
+    {
+        var session = await _context.AIAssistantSessions
+            .FirstOrDefaultAsync(x => x.Id == sessionId && x.UserId == userId && !x.IsDeleted);
+
+        if (session == null) return false;
+
+        session.IsDeleted = true;
+        return true;
+    }
 }

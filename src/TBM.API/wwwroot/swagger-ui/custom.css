@@ -1,45 +1,58 @@
 @import url("https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Outfit:wght@400;500;600;700&display=swap");
 
 :root {
-  --tbm-bg-deep: #070d17;
-  --tbm-bg-mid: #101d2f;
-  --tbm-bg-soft: #172538;
-  --tbm-surface: #f6f8fb;
-  --tbm-card: #ffffff;
-  --tbm-text: #0f1a2b;
-  --tbm-text-muted: #5d6e84;
-  --tbm-red: #e12a35;
-  --tbm-red-deep: #9e1f27;
-  --tbm-blue: #1f416f;
-  --tbm-blue-soft: #2b5e9b;
-  --tbm-line: #d7deea;
-  --tbm-shadow: 0 14px 36px rgba(7, 13, 23, 0.16);
+  --gold:        #C9A84C;
+  --gold-light:  #E4C87A;
+  --gold-deep:   #9A7A2E;
+  --gold-glow:   rgba(201, 168, 76, 0.18);
+  --dark-0:      #080808;
+  --dark-1:      #0F0F0F;
+  --dark-2:      #161616;
+  --dark-3:      #1E1E1E;
+  --dark-4:      #272727;
+  --dark-5:      #333333;
+  --text-bright: #C8BFA8;   /* toned down from pure white — warm parchment */
+  --text-mid:    #8A7E6A;
+  --text-muted:  #524840;
+  --line:        rgba(201, 168, 76, 0.15);
+  --shadow:      0 16px 48px rgba(0, 0, 0, 0.7);
+  --danger:      #9E2A2A;
+  --danger-glow: rgba(158, 42, 42, 0.22);
 }
 
-html,
-body {
-  font-family: "Outfit", "Segoe UI", sans-serif;
-  color: var(--tbm-text);
-  background:
-    radial-gradient(circle at 4% -5%, rgba(225, 42, 53, 0.24), transparent 32%),
-    radial-gradient(circle at 96% 2%, rgba(43, 94, 155, 0.2), transparent 36%),
-    linear-gradient(145deg, #e5ebf4 0%, #f6f8fb 52%, #eef3fa 100%);
+/* ── Base ─────────────────────────────────────────────────── */
+html, body {
+  font-family: "Outfit", "Segoe UI", sans-serif !important;
+  color: var(--text-bright) !important;
+  background: var(--dark-0) !important;
+  min-height: 100vh;
 }
 
-.swagger-ui {
-  max-width: 1420px;
+/* Force dark on every Swagger wrapper — IIS loads default CSS differently */
+#swagger-ui,
+.swagger-ui,
+.swagger-ui .wrapper,
+.swagger-ui .wrapper > .block,
+.swagger-ui .opblock-tag-section,
+.swagger-ui .no-margin {
+  background: var(--dark-0) !important;
+  color: var(--text-bright) !important;
 }
 
-.swagger-ui .wrapper {
-  max-width: 1340px;
+.swagger-ui .information-container {
+  background: var(--dark-0) !important;
 }
 
+.swagger-ui .scheme-container {
+  background: var(--dark-2) !important;
+}
+
+/* ── Topbar ───────────────────────────────────────────────── */
 .swagger-ui .topbar {
-  background:
-    linear-gradient(114deg, rgba(7, 13, 23, 0.98) 0%, rgba(16, 29, 47, 0.98) 45%, rgba(31, 65, 111, 0.98) 100%);
-  border-bottom: 2px solid rgba(225, 42, 53, 0.42);
-  box-shadow: 0 10px 34px rgba(7, 13, 23, 0.34);
-  padding: 0.35rem 0;
+  background: var(--dark-1);
+  border-bottom: 1px solid var(--gold-deep);
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.6);
+  padding: 0.4rem 0;
 }
 
 .swagger-ui .topbar .topbar-wrapper {
@@ -55,41 +68,43 @@ body {
   text-decoration: none;
 }
 
+/* ── Brand ────────────────────────────────────────────────── */
 .tbm-brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.78rem;
+  gap: 0.8rem;
 }
 
 .tbm-brand__logo {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
-  box-shadow: 0 0 0 1px rgba(225, 42, 53, 0.35), 0 7px 18px rgba(225, 42, 53, 0.2);
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--gold-deep), 0 4px 16px rgba(201, 168, 76, 0.25);
 }
 
 .tbm-brand__text {
   display: flex;
   flex-direction: column;
-  line-height: 1.12;
+  line-height: 1.15;
 }
 
 .tbm-brand__title {
-  font-family: "Archivo", "Segoe UI", sans-serif;
-  font-size: 1rem;
+  font-family: "Archivo", sans-serif;
+  font-size: 0.95rem;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #eef3ff;
+  color: var(--gold);
 }
 
 .tbm-brand__sub {
-  font-size: 0.7rem;
-  letter-spacing: 0.09em;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(202, 218, 243, 0.84);
+  color: var(--text-muted);
 }
 
+/* ── Info panel ───────────────────────────────────────────── */
 .swagger-ui .information-container,
 .swagger-ui .scheme-container {
   background: transparent;
@@ -97,12 +112,12 @@ body {
 
 .swagger-ui .information-container .main {
   position: relative;
-  background: var(--tbm-card);
-  border: 1px solid var(--tbm-line);
-  border-radius: 20px;
-  box-shadow: var(--tbm-shadow);
+  background: var(--dark-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
   margin-top: 1.25rem;
-  padding: 1.35rem 1.45rem;
+  padding: 1.4rem 1.5rem;
   overflow: hidden;
 }
 
@@ -110,48 +125,50 @@ body {
   content: "";
   position: absolute;
   inset: 0 0 auto;
-  height: 4px;
-  background: linear-gradient(90deg, var(--tbm-red), #f04f59 40%, var(--tbm-blue-soft));
+  height: 3px;
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold), var(--gold-light), var(--gold));
 }
 
 .swagger-ui .info .title {
-  font-family: "Archivo", "Segoe UI", sans-serif;
-  font-size: clamp(1.3rem, 1.7vw, 1.72rem);
-  letter-spacing: 0.04em;
+  font-family: "Archivo", sans-serif;
+  font-size: clamp(1.2rem, 1.6vw, 1.6rem);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--tbm-bg-deep);
+  color: var(--gold);
 }
 
 .swagger-ui .info p,
 .swagger-ui .info li,
 .swagger-ui .info table {
-  color: var(--tbm-text-muted);
+  color: var(--text-mid);
 }
 
+.swagger-ui .info a {
+  color: var(--gold-light);
+}
+
+/* ── Swagger panel banner ─────────────────────────────────── */
 #tbm-swagger-panel {
   margin: 1rem 0 1.2rem;
-  border-radius: 14px;
-  border: 1px solid #dae2f0;
-  background:
-    linear-gradient(135deg, rgba(225, 42, 53, 0.08), transparent 48%),
-    linear-gradient(325deg, rgba(31, 65, 111, 0.1), transparent 45%),
-    #f9fbff;
-  padding: 0.95rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--dark-3);
+  padding: 1rem 1.1rem;
   display: grid;
-  gap: 0.65rem;
+  gap: 0.6rem;
 }
 
 #tbm-swagger-panel strong {
-  font-family: "Archivo", "Segoe UI", sans-serif;
-  font-size: 0.95rem;
-  letter-spacing: 0.05em;
+  font-family: "Archivo", sans-serif;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--tbm-bg-deep);
+  color: var(--gold);
 }
 
 #tbm-swagger-panel span {
-  color: #4f6177;
-  font-size: 0.9rem;
+  color: var(--text-mid);
+  font-size: 0.88rem;
 }
 
 .tbm-panel-links {
@@ -163,126 +180,323 @@ body {
 .tbm-panel-links a {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  padding: 0.35rem 0.72rem;
+  min-height: 30px;
+  padding: 0.3rem 0.85rem;
   border-radius: 999px;
-  font-size: 0.74rem;
-  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+  letter-spacing: 0.07em;
   font-weight: 700;
   text-transform: uppercase;
   text-decoration: none;
   border: 1px solid transparent;
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
 .tbm-panel-links a:first-child {
-  background: linear-gradient(100deg, var(--tbm-red), #ee434e);
-  color: #fff;
+  background: linear-gradient(100deg, var(--gold-deep), var(--gold));
+  color: var(--dark-0);
 }
 
 .tbm-panel-links a:last-child {
-  background: linear-gradient(100deg, var(--tbm-blue), var(--tbm-blue-soft));
-  color: #fff;
+  background: transparent;
+  border-color: var(--gold-deep);
+  color: var(--gold);
 }
 
 .tbm-panel-links a:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(13, 22, 39, 0.18);
+  box-shadow: 0 6px 18px rgba(201, 168, 76, 0.25);
 }
 
+/* ── Operation blocks ─────────────────────────────────────── */
 .swagger-ui .opblock-tag {
-  font-family: "Archivo", "Segoe UI", sans-serif;
+  font-family: "Archivo", sans-serif;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
+  color: var(--text-bright) !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.swagger-ui .opblock-tag:hover {
+  background: var(--gold-glow) !important;
 }
 
 .swagger-ui .opblock {
-  border-radius: 14px;
-  border-width: 1px;
-  box-shadow: 0 7px 20px rgba(16, 29, 47, 0.08);
+  border-radius: 12px;
+  border: 1px solid var(--dark-4) !important;
+  background: var(--dark-2) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   overflow: hidden;
-  animation: tbm-rise 220ms ease-out;
+  animation: tbm-rise 200ms ease-out;
+}
+
+.swagger-ui .opblock.is-open {
+  border-color: var(--gold-deep) !important;
 }
 
 .swagger-ui .opblock .opblock-summary {
-  border-bottom-color: rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--dark-4) !important;
+}
+
+.swagger-ui .opblock .opblock-summary:hover {
+  background: var(--dark-3) !important;
 }
 
 .swagger-ui .opblock .opblock-summary-path {
-  font-family: "Archivo", "Segoe UI", sans-serif;
+  font-family: "Archivo", sans-serif;
   letter-spacing: 0.01em;
+  color: var(--text-bright) !important;
+}
+
+.swagger-ui .opblock .opblock-summary-description {
+  color: var(--text-muted) !important;
 }
 
 .swagger-ui .opblock .opblock-summary-method {
-  border-radius: 8px;
+  border-radius: 6px;
+  font-family: "Archivo", sans-serif;
+  font-weight: 700;
 }
 
-.swagger-ui .btn {
+/* Method colours */
+.swagger-ui .opblock.opblock-get    { border-left: 3px solid #4A9EAF !important; }
+.swagger-ui .opblock.opblock-post   { border-left: 3px solid var(--gold) !important; }
+.swagger-ui .opblock.opblock-put    { border-left: 3px solid #7B9E4A !important; }
+.swagger-ui .opblock.opblock-patch  { border-left: 3px solid #9E7B4A !important; }
+.swagger-ui .opblock.opblock-delete { border-left: 3px solid #9E4A4A !important; }
+
+.swagger-ui .opblock.opblock-get    .opblock-summary-method { background: #4A9EAF !important; }
+.swagger-ui .opblock.opblock-post   .opblock-summary-method { background: var(--gold) !important; color: var(--dark-0) !important; }
+.swagger-ui .opblock.opblock-put    .opblock-summary-method { background: #7B9E4A !important; }
+.swagger-ui .opblock.opblock-patch  .opblock-summary-method { background: #9E7B4A !important; }
+.swagger-ui .opblock.opblock-delete .opblock-summary-method { background: #9E4A4A !important; }
+
+/* ── Opblock body ─────────────────────────────────────────── */
+.swagger-ui .opblock-body,
+.swagger-ui .responses-wrapper,
+.swagger-ui .opblock-description-wrapper,
+.swagger-ui .opblock-external-docs-wrapper {
+  background: var(--dark-1) !important;
+}
+
+.swagger-ui .opblock-body pre.microlight,
+.swagger-ui .highlight-code pre {
+  background: var(--dark-0) !important;
+  border: 1px solid var(--dark-4);
   border-radius: 8px;
-  font-family: "Archivo", "Segoe UI", sans-serif;
-  letter-spacing: 0.04em;
+  color: var(--gold-light) !important;
+}
+
+/* ── Models / schema ──────────────────────────────────────── */
+.swagger-ui section.models {
+  background: var(--dark-2) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 12px;
+}
+
+.swagger-ui section.models h4 {
+  color: var(--gold) !important;
+  font-family: "Archivo", sans-serif;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
-.swagger-ui .btn.authorize {
-  background: linear-gradient(100deg, var(--tbm-red), #ef3f4a);
-  border-color: transparent;
-  color: #fff;
+.swagger-ui .model-box {
+  background: var(--dark-3) !important;
+  border-radius: 8px;
+}
+
+.swagger-ui .model {
+  color: var(--text-mid) !important;
+}
+
+.swagger-ui .prop-type {
+  color: var(--gold-light) !important;
+}
+
+/* ── Forms / inputs ───────────────────────────────────────── */
+.swagger-ui input[type="text"],
+.swagger-ui input[type="email"],
+.swagger-ui input[type="password"],
+.swagger-ui textarea,
+.swagger-ui select {
+  background: var(--dark-3) !important;
+  border: 1px solid var(--dark-5) !important;
+  color: var(--text-bright) !important;
+  border-radius: 6px !important;
+}
+
+.swagger-ui input[type="text"]:focus,
+.swagger-ui textarea:focus {
+  border-color: var(--gold-deep) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px var(--gold-glow) !important;
+}
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.swagger-ui .btn {
+  border-radius: 6px;
+  font-family: "Archivo", sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-weight: 700;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.swagger-ui .btn:hover {
+  transform: translateY(-1px);
+}
+
+.swagger-ui .btn.authorize,
+.swagger-ui .authorization__btn {
+  background: linear-gradient(100deg, #6B1A1A, var(--danger)) !important;
+  border: 1px solid #7A2020 !important;
+  color: #F5D0D0 !important;
+  box-shadow: 0 4px 18px var(--danger-glow) !important;
+}
+
+.swagger-ui .btn.authorize:hover,
+.swagger-ui .authorization__btn:hover {
+  background: linear-gradient(100deg, #7A2020, #B03030) !important;
+  box-shadow: 0 6px 24px rgba(158, 42, 42, 0.4) !important;
+}
+
+/* Lock icon tint to match */
+.swagger-ui .btn.authorize svg,
+.swagger-ui .authorization__btn svg {
+  fill: #F5D0D0 !important;
 }
 
 .swagger-ui .btn.execute {
-  background: linear-gradient(100deg, var(--tbm-blue), #2e6cb2);
-  border-color: transparent;
-  color: #fff;
+  background: var(--dark-4) !important;
+  border: 1px solid var(--gold-deep) !important;
+  color: var(--gold) !important;
 }
 
-.swagger-ui .responses-wrapper,
-.swagger-ui .opblock-description-wrapper,
-.swagger-ui .opblock-external-docs-wrapper,
-.swagger-ui .opblock-body pre.microlight {
-  background: #fcfdff;
+.swagger-ui .btn.execute:hover {
+  background: var(--gold-glow) !important;
+  box-shadow: 0 4px 16px rgba(201, 168, 76, 0.2);
 }
 
+.swagger-ui .btn.cancel {
+  background: transparent !important;
+  border: 1px solid var(--dark-5) !important;
+  color: var(--text-muted) !important;
+}
+
+/* ── Tables ───────────────────────────────────────────────── */
 .swagger-ui table thead tr th,
 .swagger-ui .responses-inner h4,
 .swagger-ui .responses-inner h5 {
-  font-family: "Archivo", "Segoe UI", sans-serif;
+  font-family: "Archivo", sans-serif;
+  color: var(--text-mid) !important;
+  border-bottom: 1px solid var(--dark-4) !important;
 }
 
+.swagger-ui table tbody tr td {
+  color: var(--text-mid) !important;
+  border-bottom: 1px solid var(--dark-4) !important;
+}
+
+/* ── Response codes ───────────────────────────────────────── */
+.swagger-ui .response-col_status {
+  color: var(--gold) !important;
+  font-family: "Archivo", sans-serif;
+  font-weight: 700;
+}
+
+/* ── Auth modal ───────────────────────────────────────────── */
+.swagger-ui .dialog-ux .modal-ux {
+  background: var(--dark-2) !important;
+  border: 1px solid var(--gold-deep) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8) !important;
+}
+
+.swagger-ui .dialog-ux .modal-ux-header {
+  background: var(--dark-1) !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.swagger-ui .dialog-ux .modal-ux-header h3 {
+  color: var(--gold) !important;
+  font-family: "Archivo", sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.swagger-ui .dialog-ux .modal-ux-content {
+  color: var(--text-mid) !important;
+}
+
+/* ── Scheme container ─────────────────────────────────────── */
+.swagger-ui .scheme-container {
+  background: var(--dark-2) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  padding: 0.75rem 1rem !important;
+}
+
+/* Extra wrappers that carry white backgrounds in production IIS */
+.swagger-ui .filters,
+.swagger-ui .filter-container {
+  background: var(--dark-1) !important;
+}
+
+.swagger-ui select {
+  background: var(--dark-3) !important;
+  color: var(--text-bright) !important;
+  border-color: var(--dark-5) !important;
+}
+
+/* ── General text calming ─────────────────────────────────── */
+/* Override Swagger's default white blasts in parameter/response panels */
+.swagger-ui .opblock-body .opblock-section-header h4,
+.swagger-ui .opblock-body label,
+.swagger-ui .parameter__name,
+.swagger-ui .parameter__type,
+.swagger-ui .parameter__deprecated,
+.swagger-ui .parameter__in,
+.swagger-ui .parameters-col_description p,
+.swagger-ui .response-col_description,
+.swagger-ui .renderedMarkdown p,
+.swagger-ui .markdown p {
+  color: var(--text-mid) !important;
+}
+
+.swagger-ui .opblock-section-header {
+  background: var(--dark-3) !important;
+  border-bottom: 1px solid var(--dark-4) !important;
+}
+
+.swagger-ui .opblock-section-header h4 {
+  font-family: "Archivo", sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.78rem !important;
+}
+
+/* TRY IT OUT / EXECUTE buttons — keep readable but not blinding */
+.swagger-ui .try-out__btn {
+  border-color: var(--dark-5) !important;
+  color: var(--text-mid) !important;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--dark-1); }
+::-webkit-scrollbar-thumb { background: var(--dark-5); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold-deep); }
+
+/* ── Animation ────────────────────────────────────────────── */
 @keyframes tbm-rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 860px) {
-  .tbm-brand__logo {
-    width: 40px;
-    height: 40px;
-  }
-
-  .tbm-brand__title {
-    font-size: 0.82rem;
-    letter-spacing: 0.08em;
-  }
-
-  .tbm-brand__sub {
-    font-size: 0.64rem;
-    letter-spacing: 0.06em;
-  }
-
-  .swagger-ui .information-container .main {
-    border-radius: 16px;
-    padding: 1rem;
-  }
-
-  #tbm-swagger-panel {
-    padding: 0.78rem;
-  }
+  .tbm-brand__logo  { width: 36px; height: 36px; }
+  .tbm-brand__title { font-size: 0.8rem; }
+  .tbm-brand__sub   { font-size: 0.6rem; }
 }

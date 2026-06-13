@@ -8,6 +8,9 @@ using TBM.Core.Entities;
 using TBM.Core.Entities.Audit;
 using TBM.Core.Entities.Contact;
 using TBM.Core.Entities.Payments;
+using TBM.Core.Entities.DesignFlow;
+using TBM.Core.Entities.Subscriptions;
+using TBM.Core.Entities.Portfolio;
 
 
 namespace TBM.Infrastructure.Data;
@@ -49,13 +52,29 @@ public DbSet<AIUsage> AIUsages => Set<AIUsage>();
     // Order tables
     public DbSet<Cart> Carts { get; set; }
     public DbSet<CartItem> CartItems { get; set; }
-    public DbSet<Order> Orders { get; set; }
-    public DbSet<OrderItem> OrderItems { get; set; }
+public DbSet<Order> Orders { get; set; }
+public DbSet<OrderItem> OrderItems { get; set; }
+public DbSet<DesignSession> DesignSessions { get; set; }
+public DbSet<BillOfMaterials> BillsOfMaterials { get; set; }
+public DbSet<BOMItem> BOMItems { get; set; }
+public DbSet<Project> Projects { get; set; }
+public DbSet<ProjectTimeline> ProjectTimelines { get; set; }
+public DbSet<ProjectDocument> ProjectDocuments { get; set; }
+public DbSet<SiteGalleryImage> SiteGalleryImages { get; set; }
     
     public DbSet<Setting> Settings { get; set; }
     public DbSet<OrderStatusHistory> OrderStatusHistories { get; set; }
 public DbSet<WebhookEvent> WebhookEvents { get; set; }
 public DbSet<ContactMessage> ContactMessages => Set<ContactMessage>();
+
+    // Subscription tables
+    public DbSet<Subscription> Subscriptions { get; set; }
+    public DbSet<PricingConfig> PricingConfigs { get; set; }
+    public DbSet<Discount> Discounts { get; set; }
+
+    // Vendor Portfolio
+    public DbSet<VendorPortfolioProject> VendorPortfolioProjects { get; set; }
+    public DbSet<PortfolioProjectImage> PortfolioProjectImages { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

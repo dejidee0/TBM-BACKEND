@@ -5,7 +5,7 @@ using TBM.Application.Services;
 namespace TBM.API.Controllers.V1.Admin;
 
 [ApiController]
-[Route("api/admin/financial")]
+[Route("api/v1/admin/financial")]
 [Authorize(Roles = "Admin,SuperAdmin")]
 public class AdminFinancialController : ControllerBase
 {

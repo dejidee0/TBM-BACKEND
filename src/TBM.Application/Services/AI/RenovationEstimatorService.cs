@@ -296,13 +296,13 @@ public class RenovationEstimatorService
             new()
             {
                 Label = "Book consultation",
-                Url = "/api/dashboard/consultations",
+                Url = "/api/v1/dashboard/consultations",
                 Method = "GET"
             },
             new()
             {
                 Label = "Start checkout when ready",
-                Url = "/api/checkout",
+                Url = "/api/v1/checkout",
                 Method = "GET"
             }
         };

@@ -1,6 +1,8 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using TBM.Application.DTOs.Common;
 using TBM.Application.DTOs.Products;
 using TBM.Application.Interfaces;
 
@@ -54,7 +56,7 @@ public class ProductsController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend local route: /api/flooring
     /// </summary>
-    [HttpGet("~/api/flooring")]
+    [HttpGet("~/api/v1/flooring")]
     public async Task<IActionResult> GetFlooring(
         [FromQuery] string? category = null,
         [FromQuery] string? materialType = null,
@@ -127,7 +129,7 @@ public class ProductsController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /materials
     /// </summary>
-    [HttpGet("~/materials")]
+    [HttpGet("~/api/v1/materials/list")]
     public async Task<IActionResult> GetMaterials(
         [FromQuery] string? category = null,
         [FromQuery] string? materialType = null,
@@ -200,7 +202,7 @@ public class ProductsController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /materials/:id
     /// </summary>
-    [HttpGet("~/materials/{id}")]
+    [NonAction]
     public async Task<IActionResult> GetMaterialById(string id)
     {
         if (Guid.TryParse(id, out var productId))
@@ -330,6 +332,60 @@ public class ProductsController : ControllerBase
         }
         
         return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result);
+    }
+    
+    /// <summary>
+    /// Bulk import products from CSV file (Admin only)
+    /// </summary>
+    /// <remarks>
+    /// Accepts a CSV file with the following columns:
+    /// Name, Description, ShortDescription, SKU, BrandType, ProductType, CategoryName, 
+    /// Price, CompareAtPrice, ShowPrice, StockQuantity, LowStockThreshold, TrackInventory, 
+    /// IsActive, IsFeatured, DisplayOrder, MetaTitle, MetaDescription, Tags, AIKeywords,
+    /// MaterialType, QualityTier, RecommendedFor
+    /// 
+    /// BrandType valid values: TBM, Bogat
+    /// ProductType valid values: PhysicalProduct, Service
+    /// CategoryName must match an existing category name or slug
+    /// Max rows: 500
+    /// </remarks>
+    [Authorize(Roles = "SuperAdmin")]
+    [HttpPost("import")]
+    [RequestSizeLimit(10_485_760)] // 10MB max file size
+    [DisableRequestSizeLimit]
+    public async Task<IActionResult> Import(IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(ApiResponse<ImportResultDto>.ErrorResponse("No file uploaded"));
+        }
+
+        if (!file.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(ApiResponse<ImportResultDto>.ErrorResponse("Invalid file format. Only CSV files are allowed."));
+        }
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var result = await _productService.ImportProductsAsync(stream, file.FileName);
+
+            if (!result.Success)
+            {
+                return result.Data?.Failed > 0 && result.Data?.SuccessfullyImported > 0
+                    ? StatusCode(207, result) // Multi-Status
+                    : BadRequest(result);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ApiResponse<ImportResultDto>.ErrorResponse(
+                "An error occurred while processing the file",
+                new List<string> { ex.Message }
+            ));
+        }
     }
     
     /// <summary>

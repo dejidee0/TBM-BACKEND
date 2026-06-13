@@ -7,5 +7,7 @@ namespace TBM.Infrastructure.Configuration
         public string ApiSecret { get; set; } = default!;
         public string RoomFolder { get; set; } = "rooms/original";
         public string GeneratedFolder { get; set; } = "rooms/generated";
+        public string DocumentsFolder { get; set; } = "projects/documents";
+        public string GalleryFolder { get; set; } = "projects/gallery";
     }
 }

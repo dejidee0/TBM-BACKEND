@@ -75,7 +75,8 @@ public class OpenAIAssistantLlmClient : IAssistantLlmClient
                 }
             };
 
-            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions");
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post,
+                $"{_settings.BaseUrl.TrimEnd('/')}/chat/completions");
             requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _settings.ApiKey);
             requestMessage.Content = new StringContent(
                 JsonSerializer.Serialize(payload),
@@ -87,10 +88,24 @@ public class OpenAIAssistantLlmClient : IAssistantLlmClient
 
             if (!response.IsSuccessStatusCode)
             {
+                // Extract OpenAI's error message if present so it shows in logs/health check
+                string oaiError = raw;
+                try
+                {
+                    using var errDoc = JsonDocument.Parse(raw);
+                    if (errDoc.RootElement.TryGetProperty("error", out var errEl) &&
+                        errEl.TryGetProperty("message", out var msgEl))
+                    {
+                        oaiError = msgEl.GetString() ?? raw;
+                    }
+                }
+                catch { /* keep raw */ }
+
                 _logger.LogWarning(
-                    "Assistant LLM call failed with status {StatusCode}. Body: {Body}",
+                    "ZIORA LLM call failed. Status={StatusCode} Model={Model} Error={Error}",
                     (int)response.StatusCode,
-                    Truncate(raw, 1500));
+                    _settings.Model,
+                    Truncate(oaiError, 500));
                 return null;
             }
 

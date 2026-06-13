@@ -35,7 +35,7 @@ public class SavedController : ControllerBase
         _auditService = auditService;
     }
 
-    [HttpGet("~/api/saved")]
+    [HttpGet]
     public async Task<IActionResult> GetSaved(
         [FromQuery] string? category = null,
         [FromQuery] string? search = null,
@@ -43,6 +43,8 @@ public class SavedController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int limit = 10)
     {
+        try
+        {
         var userId = GetUserId();
         var state = await GetStateAsync(userId);
 
@@ -118,9 +120,26 @@ public class SavedController : ControllerBase
                 hasMore = safePage < totalPages
             }
         });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            var logger = HttpContext.RequestServices.GetRequiredService<ILogger<SavedController>>();
+            logger.LogError(ex, "GET /saved failed for user {User}", User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value);
+            return StatusCode(500, new
+            {
+                success = false,
+                message = "Failed to load saved items. Please try again.",
+                error = $"{ex.GetType().Name}: {ex.Message}",
+                innerError = ex.InnerException?.Message
+            });
+        }
     }
 
-    [HttpPost("~/api/saved")]
+    [HttpPost]
     public async Task<IActionResult> SaveItem([FromBody] SaveItemRequest request)
     {
         var userId = GetUserId();
@@ -152,7 +171,7 @@ public class SavedController : ControllerBase
         return Ok(new { success = true });
     }
 
-    [HttpDelete("~/api/saved/{id:guid}")]
+    [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteSaved(Guid id)
     {
         var userId = GetUserId();
@@ -175,7 +194,7 @@ public class SavedController : ControllerBase
         return Ok(new { success = true });
     }
 
-    [HttpPost("~/api/saved/{id:guid}/add-to-cart")]
+    [HttpPost("{id:guid}/add-to-cart")]
     public async Task<IActionResult> AddSavedToCart(Guid id, [FromBody] AddSavedToCartRequest request)
     {
         var userId = GetUserId();
@@ -201,7 +220,7 @@ public class SavedController : ControllerBase
         return Ok(new { success = true, message = "Item added to cart" });
     }
 
-    [HttpPost("~/api/saved/{id:guid}/add-to-moodboard")]
+    [HttpPost("{id:guid}/add-to-moodboard")]
     public async Task<IActionResult> AddToMoodboard(Guid id, [FromBody] AddToMoodboardRequest request)
     {
         var userId = GetUserId();
@@ -254,7 +273,7 @@ public class SavedController : ControllerBase
         return Ok(new { success = true, message = "Item added to moodboard" });
     }
 
-    [HttpPost("~/api/saved/create-board")]
+    [HttpPost("create-board")]
     public async Task<IActionResult> CreateBoard([FromBody] CreateBoardRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.BoardName))
@@ -301,7 +320,7 @@ public class SavedController : ControllerBase
         });
     }
 
-    [HttpPost("~/api/saved/buy-all")]
+    [HttpPost("buy-all")]
     public async Task<IActionResult> BuyAll([FromBody] BuyAllRequest request)
     {
         var userId = GetUserId();

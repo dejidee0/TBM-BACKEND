@@ -7,7 +7,7 @@ using TBM.Application.Services;
 namespace TBM.API.Controllers.V1.Admin;
 
 [ApiController]
-[Route("api/admin/vendors")]
+[Route("api/v1/admin/vendors")]
 [Authorize(Roles = "Admin,SuperAdmin")]
 public class AdminVendorsController : ControllerBase
 {

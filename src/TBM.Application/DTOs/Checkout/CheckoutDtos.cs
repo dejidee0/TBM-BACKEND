@@ -72,6 +72,10 @@ public class CheckoutPaymentDetailsDto
 
 public class CheckoutPaymentRequestDto
 {
+    public Guid? DesignSessionId { get; set; }
+    public string? GuestEmail { get; set; }
+    public string? GuestPhone { get; set; }
+    public string? GuestSessionId { get; set; }
     public CheckoutDeliveryDto Delivery { get; set; } = new();
     public CheckoutPaymentDetailsDto Payment { get; set; } = new();
     public decimal Total { get; set; }

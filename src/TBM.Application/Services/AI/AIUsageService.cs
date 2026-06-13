@@ -1,4 +1,5 @@
 using TBM.Application.DTOs.AI;
+using TBM.Application.Helpers;
 using TBM.Core.Entities.AI;
 using TBM.Core.Enums;
 using TBM.Core.Interfaces;
@@ -72,15 +73,36 @@ public class AIUsageService
         var toUtc = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1);
 
         var rows = await _unitOfWork.AIUsages.GetMonthlySpendAsync(fromUtc, toUtc);
-        return rows.Select(x => new AIUsageMonthlySpendResponseDto
-        {
-            Year = x.Year,
-            Month = x.Month,
-            TotalGenerations = x.TotalGenerations,
-            TotalCreditsUsed = x.TotalCreditsUsed,
-            TotalEstimatedCost = x.TotalEstimatedCost,
-            DistinctUsers = x.DistinctUsers
-        }).ToList();
+        var lookup = rows.ToDictionary(x => (x.Year, x.Month));
+        var endMonth = toUtc.AddMonths(-1);
+
+        return DateRangeHelper.GetMonthStartsUtc(fromUtc, endMonth)
+            .Select(m =>
+            {
+                if (lookup.TryGetValue((m.Year, m.Month), out var row))
+                {
+                    return new AIUsageMonthlySpendResponseDto
+                    {
+                        Year = row.Year,
+                        Month = row.Month,
+                        TotalGenerations = row.TotalGenerations,
+                        TotalCreditsUsed = row.TotalCreditsUsed,
+                        TotalEstimatedCost = row.TotalEstimatedCost,
+                        DistinctUsers = row.DistinctUsers
+                    };
+                }
+
+                return new AIUsageMonthlySpendResponseDto
+                {
+                    Year = m.Year,
+                    Month = m.Month,
+                    TotalGenerations = 0,
+                    TotalCreditsUsed = 0,
+                    TotalEstimatedCost = 0m,
+                    DistinctUsers = 0
+                };
+            })
+            .ToList();
     }
 
     private static (DateTime fromUtc, DateTime toUtc) ResolveUserWindow(int? year, int? month)

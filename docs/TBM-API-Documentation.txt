@@ -1,0 +1,3110 @@
+# TBM Digital Platform API Reference
+
+Canonical merged reference. Use this file as the single source of truth.
+
+Generated from the current codebase snapshot on 2026-03-25.
+
+This document was derived from:
+- `src/TBM.API/Controllers/**/*.cs`
+- `src/TBM.Application/DTOs/**/*.cs`
+- `src/TBM.Core/DTOs/**/*.cs`
+- `src/TBM.Core/Enums/*.cs`
+- `src/TBM.API/Program.cs`
+- `src/TBM.API/Middleware/*.cs`
+
+Current API surface in controllers: 206 endpoints.
+
+## 1. Overview
+
+- Primary API prefixes: `/api/v1/*`, `/api/admin/*`, `/api/webhooks/*`
+- Canonical contracts should prefer `/api/v1/*`; legacy `/api/*` compatibility aliases remain live for frontend compatibility.
+- Swagger UI is exposed at `/`; Swagger JSON at `/swagger/v1/swagger.json`.
+- Route matching is case-insensitive.
+- Roles: `Customer`, `Vendor`, `Admin`, `SuperAdmin`.
+- `RequestContextMiddleware` emits `X-Request-ID` and `X-Correlation-ID`.
+- Rate limiting uses `DynamicPolicy` and `WebhookPolicy`; maintenance mode returns `503` for non-admin, non-swagger traffic.
+
+## 2. Endpoint Index
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form |
+|---|---|---|---|---|---|---|
+| GET | `/api/admin/ai/credits/{userId:guid}` | Roles: Admin,SuperAdmin | visible | none | userId: Guid | none |
+| POST | `/api/admin/ai/credits/adjust` | Roles: Admin,SuperAdmin | visible | none | none | body: request: AICreditAdjustmentRequestDto |
+| GET | `/api/admin/ai/usage/monthly-spend` | Roles: Admin,SuperAdmin | visible | months: int = 6 | none | none |
+| GET | `/api/admin/ai/usage/user/{userId:guid}` | Roles: Admin,SuperAdmin | visible | year: int? = null, month: int? = null | userId: Guid | none |
+| GET | `/api/admin/analytics/monthly-revenue` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| GET | `/api/admin/analytics/overview` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| GET | `/api/admin/analytics/payment-distribution` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| POST | `/api/admin/auth/login` | Public | visible | none | none | body: dto: AdminLoginDto |
+| POST | `/api/admin/auth/logout` | Roles: Admin,SuperAdmin | visible | none | none | body: dto: RefreshTokenDto |
+| POST | `/api/admin/auth/refresh` | Public | visible | none | none | body: dto: RefreshTokenDto |
+| GET | `/api/admin/dashboard/alerts` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| POST | `/api/admin/dashboard/export` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| GET | `/api/admin/dashboard/quick-actions` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| POST | `/api/admin/dashboard/refresh` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| GET | `/api/admin/dashboard/revenue` | Roles: Admin,SuperAdmin | visible | timeRange: string? = "30d" | none | none |
+| GET | `/api/admin/dashboard/server-load` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| GET | `/api/admin/dashboard/stats` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| GET | `/api/admin/financial/export` | Roles: Admin,SuperAdmin | visible | search: string? = null, filter: string? = null | none | none |
+| GET | `/api/admin/financial/monthly-revenue` | Roles: Admin,SuperAdmin | visible | months: int = 12 | none | none |
+| GET | `/api/admin/financial/revenue-by-service` | Roles: Admin,SuperAdmin | visible | dateRange: string? = null | none | none |
+| GET | `/api/admin/financial/stats` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| GET | `/api/admin/financial/transactions` | Roles: Admin,SuperAdmin | visible | page: int = 1, limit: int = 20, search: string? = null, filter: string? = null | none | none |
+| GET | `/api/admin/observability/slo/{domain}` | Roles: Admin,SuperAdmin | visible | none | domain: string | none |
+| GET | `/api/admin/observability/slo/overview` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| GET | `/api/admin/orders` | Roles: Admin,SuperAdmin | visible | page: int = 1, pageSize: int = 20, status: OrderStatus? = null, search: string? = null | none | none |
+| PATCH | `/api/admin/orders/{id}/cancel` | Roles: Admin,SuperAdmin | visible | none | id: Guid | body: reason: string |
+| POST | `/api/admin/orders/{id}/refund` | Roles: Admin,SuperAdmin | visible | none | id: Guid | body: reason: string |
+| PATCH | `/api/admin/orders/{id}/status` | Roles: Admin,SuperAdmin | visible | none | id: Guid | body: newStatus: OrderStatus |
+| PATCH | `/api/admin/orders/{id}/tracking` | Roles: Admin,SuperAdmin | visible | none | id: Guid | body: dto: TrackingDto |
+| PUT | `/api/admin/settings` | Roles: Admin,SuperAdmin | visible | none | none | body: dto: LegacyAdminSettingsFormDto |
+| GET | `/api/admin/settings/ai` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| PUT | `/api/admin/settings/ai` | Roles: Admin,SuperAdmin | visible | none | none | body: dto: AISettingsDto |
+| PATCH | `/api/admin/settings/ai/models/{modelId}` | Roles: Admin,SuperAdmin | visible | none | modelId: string | body: dto: ToggleEnabledDto |
+| GET | `/api/admin/settings/general` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| PUT | `/api/admin/settings/general` | Roles: Admin,SuperAdmin | visible | none | none | body: dto: GeneralSettingsDto |
+| GET | `/api/admin/settings/notifications` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| PUT | `/api/admin/settings/notifications` | Roles: Admin,SuperAdmin | visible | none | none | body: dto: AdminNotificationSettingsDto |
+| GET | `/api/admin/settings/payment` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| PUT | `/api/admin/settings/payment` | Roles: Admin,SuperAdmin | visible | none | none | body: dto: PaymentSettingsDto |
+| PATCH | `/api/admin/settings/payment/gateways/{gatewayId}` | Roles: Admin,SuperAdmin | visible | none | gatewayId: string | body: dto: ToggleEnabledDto |
+| GET | `/api/admin/system-logs` | Roles: Admin,SuperAdmin | visible | page: int = 1, limit: int = 20, search: string? = null, severity: string? = null, dateRange: string? = null | none | none |
+| GET | `/api/admin/system-logs/export` | Roles: Admin,SuperAdmin | visible | severity: string? = null, search: string? = null, dateRange: string? = null | none | none |
+| GET | `/api/admin/system-logs/stats` | Roles: Admin,SuperAdmin | visible | dateRange: string? = null | none | none |
+| GET | `/api/admin/users` | Roles: Admin,SuperAdmin | visible | page: int = 1 | none | none |
+| POST | `/api/admin/users` | Roles: Admin,SuperAdmin | visible | none | none | body: request: AdminCreateUserRequestDto |
+| GET | `/api/admin/users/{id:guid}` | Roles: Admin,SuperAdmin | visible | none | id: Guid | none |
+| PATCH | `/api/admin/users/{id:guid}/role` | Roles: Admin,SuperAdmin | visible | none | id: Guid | body: request: AdminUpdateUserRoleRequestDto |
+| PATCH | `/api/admin/users/{id:guid}/status` | Roles: Admin,SuperAdmin | visible | none | id: Guid | body: request: AdminUpdateUserStatusRequestDto |
+| DELETE | `/api/admin/users/{id}` | Roles: Admin,SuperAdmin | visible | none | id: Guid | none |
+| PATCH | `/api/admin/users/{id}/reactivate` | Roles: Admin,SuperAdmin | visible | none | id: Guid | none |
+| PATCH | `/api/admin/users/{id}/suspend` | Roles: Admin,SuperAdmin | visible | none | id: Guid | none |
+| GET | `/api/admin/users/export` | Roles: Admin,SuperAdmin | visible | none | none | none |
+| POST | `/api/admin/vendors/{userId:guid}/activate` | Roles: Admin,SuperAdmin | visible | none | userId: Guid | body: request: ActivateVendorRequest |
+| GET | `/api/admin/vendors/{vendorUserId:guid}/ownership` | Roles: Admin,SuperAdmin | visible | none | vendorUserId: Guid | none |
+| DELETE | `/api/admin/vendors/products/{productId:guid}/assign` | Roles: Admin,SuperAdmin | visible | none | productId: Guid | none |
+| POST | `/api/admin/vendors/products/{productId:guid}/assign` | Roles: Admin,SuperAdmin | visible | none | productId: Guid | body: request: AssignProductOwnerRequest |
+| POST | `/api/cart/merge` | JWT | visible | none | none | body: dto: MergeCartRequestDto |
+| GET | `/api/orders` | JWT | hidden | none | none | none |
+| GET | `/api/orders/{orderId:guid}` | JWT | hidden | none | orderId: Guid | none |
+| GET | `/api/orders/{orderId:guid}/invoice` | JWT | hidden | none | orderId: Guid | none |
+| DELETE | `/api/v1/account` | JWT | visible | none | none | body: request: OptionalPasswordRequest |
+| POST | `/api/v1/account/addresses` | JWT | visible | none | none | body: request: AddressRequest |
+| DELETE | `/api/v1/account/addresses/{addressId:guid}` | JWT | visible | none | addressId: Guid | none |
+| PUT | `/api/v1/account/addresses/{addressId:guid}` | JWT | visible | none | addressId: Guid | body: request: AddressRequest |
+| PUT | `/api/v1/account/addresses/{addressId:guid}/default` | JWT | visible | none | addressId: Guid | none |
+| POST | `/api/v1/account/avatar` | JWT | visible | none | none | form: request: UploadAvatarRequest |
+| GET | `/api/v1/account/brand-access` | JWT | visible | none | none | none |
+| POST | `/api/v1/account/deactivate` | JWT | visible | none | none | body: request: OptionalPasswordRequest |
+| PUT | `/api/v1/account/email` | JWT | visible | none | none | body: request: UpdateEmailRequest |
+| GET | `/api/v1/account/me` | JWT | visible | none | none | none |
+| PATCH | `/api/v1/account/me` | JWT | visible | none | none | body: request: UpdateMeRequest |
+| GET | `/api/v1/account/notifications` | JWT | visible | none | none | none |
+| PUT | `/api/v1/account/notifications` | JWT | visible | none | none | body: state: NotificationPreferenceState |
+| PUT | `/api/v1/account/password` | JWT | visible | none | none | body: request: UpdatePasswordRequest |
+| POST | `/api/v1/account/password/change` | JWT | visible | none | none | body: request: ChangePasswordRequest |
+| POST | `/api/v1/account/password/otp/request` | JWT | visible | none | none | body: request: PasswordOtpRequest |
+| POST | `/api/v1/account/password/otp/verify` | JWT | visible | none | none | body: request: VerifyPasswordOtpRequest |
+| PUT | `/api/v1/account/phone` | JWT | visible | none | none | body: request: UpdatePhoneRequest |
+| GET | `/api/v1/account/profile` | JWT | visible | none | none | none |
+| PUT | `/api/v1/account/profile` | JWT | visible | none | none | body: request: UpdateProfileRequest |
+| GET | `/api/v1/account/security` | JWT | visible | none | none | none |
+| PUT | `/api/v1/account/security/2fa` | JWT | visible | none | none | body: request: UpdateTwoFactorRequest |
+| POST | `/api/v1/ai/assistant/message` | JWT | visible | none | none | body: request: AssistantMessageRequestDto |
+| GET | `/api/v1/ai/assistant/sessions` | JWT | visible | none | none | none |
+| GET | `/api/v1/ai/assistant/sessions/{sessionId:guid}` | JWT | visible | none | sessionId: Guid | none |
+| PATCH | `/api/v1/ai/assistant/tasks/{taskId:guid}` | JWT | visible | none | taskId: Guid | body: request: UpdateAssistantTaskStatusRequestDto |
+| GET | `/api/v1/ai/assistant/tool-actions/{actionId:guid}` | JWT | visible | none | actionId: Guid | none |
+| POST | `/api/v1/ai/assistant/tool-actions/{actionId:guid}/approval` | JWT | visible | none | actionId: Guid | body: request: ApproveAssistantToolActionRequestDto |
+| POST | `/api/v1/ai/assistant/tool-actions/{actionId:guid}/execute` | JWT | visible | none | actionId: Guid | body: request: ExecuteAssistantToolActionRequestDto |
+| GET | `/api/v1/ai/credits/balance` | JWT | visible | none | none | none |
+| POST | `/api/v1/ai/generate/image` | JWT | visible | none | none | body: dto: GenerateImageDto |
+| POST | `/api/v1/ai/generate/video` | JWT | visible | none | none | body: dto: GenerateVideoDto |
+| GET | `/api/v1/ai/projects` | JWT | visible | none | none | none |
+| POST | `/api/v1/ai/projects` | JWT | visible | none | none | body: dto: CreateAIProjectDto |
+| POST | `/api/v1/ai/renovation/estimate` | JWT | visible | none | none | body: request: CreateRenovationEstimateRequestDto |
+| GET | `/api/v1/ai/renovation/estimates` | JWT | visible | none | none | none |
+| GET | `/api/v1/ai/renovation/estimates/{estimateId:guid}` | JWT | visible | none | estimateId: Guid | none |
+| POST | `/api/v1/ai/transform/image` | JWT | visible | none | none | body: dto: GenerateImageDto |
+| POST | `/api/v1/ai/upload-room` | JWT | visible | none | none | form: file: IFormFile |
+| GET | `/api/v1/ai/usage/summary` | JWT | visible | year: int? = null, month: int? = null | none | none |
+| GET | `/api/v1/auth/apple` | Public | visible | none | none | none |
+| POST | `/api/v1/auth/forgot-password` | Public | visible | none | none | body: dto: ForgotPasswordDto |
+| GET | `/api/v1/auth/google` | Public | visible | none | none | none |
+| POST | `/api/v1/auth/login` | Public | visible | none | none | body: dto: LoginDto |
+| POST | `/api/v1/auth/logout` | JWT | visible | none | none | none |
+| GET | `/api/v1/auth/me` | JWT | visible | none | none | none |
+| GET | `/api/v1/auth/providers` | Public | visible | none | none | none |
+| POST | `/api/v1/auth/refresh-token` | Public | visible | none | none | body: dto: RefreshTokenDto |
+| POST | `/api/v1/auth/register` | Public | visible | none | none | body: dto: RegisterDto |
+| POST | `/api/v1/auth/resend-verification` | Public | visible | none | none | body: dto: ForgotPasswordDto |
+| POST | `/api/v1/auth/reset-password` | Public | visible | none | none | body: dto: ResetPasswordDto |
+| GET | `/api/v1/auth/verify-email` | Public | visible | token: string? | none | none |
+| POST | `/api/v1/auth/verify-email` | Public | visible | token: string? | none | none |
+| DELETE | `/api/v1/cart` | JWT | visible | none | none | none |
+| GET | `/api/v1/cart` | JWT | visible | none | none | none |
+| GET | `/api/v1/cart/api/cart` | JWT | visible | none | none | none |
+| POST | `/api/v1/cart/api/cart/add` | JWT | visible | none | none | body: dto: AddToCartDto |
+| DELETE | `/api/v1/cart/api/cart/items/{itemId:guid}` | JWT | visible | none | itemId: Guid | none |
+| PUT | `/api/v1/cart/api/cart/items/{itemId:guid}` | JWT | visible | none | itemId: Guid | body: dto: UpdateCartItemDto |
+| POST | `/api/v1/cart/apply-promo` | JWT | visible | none | none | body: dto: PromoValidationRequestDto |
+| POST | `/api/v1/cart/items` | JWT | visible | none | none | body: dto: AddToCartDto |
+| DELETE | `/api/v1/cart/items/{itemId}` | JWT | visible | none | itemId: Guid | none |
+| PUT | `/api/v1/cart/items/{itemId}` | JWT | visible | none | itemId: Guid | body: dto: UpdateCartItemDto |
+| POST | `/api/v1/cart/merge` | JWT | visible | none | none | body: dto: MergeCartRequestDto |
+| GET | `/api/v1/cart/related` | JWT | visible | limit: int = 4 | none | none |
+| GET | `/api/v1/categories` | Public | visible | none | none | none |
+| POST | `/api/v1/categories` | Roles: SuperAdmin | visible | none | none | body: dto: CreateCategoryDto |
+| DELETE | `/api/v1/categories/{id}` | Roles: SuperAdmin | visible | none | id: Guid | none |
+| GET | `/api/v1/categories/{id}` | Public | visible | none | id: Guid | none |
+| PUT | `/api/v1/categories/{id}` | Roles: SuperAdmin | visible | none | id: Guid | body: dto: UpdateCategoryDto |
+| GET | `/api/v1/categories/brand/{brandType}` | Public | visible | none | brandType: int | none |
+| GET | `/api/v1/categories/slug/{slug}` | Public | visible | none | slug: string | none |
+| GET | `/api/v1/checkout` | JWT | visible | promoCode: string? = null | none | none |
+| POST | `/api/v1/checkout/payment` | JWT | visible | none | none | body: dto: CheckoutPaymentRequestDto |
+| GET | `/api/v1/checkout/payment/paystack/verify/{reference}` | JWT | visible | none | reference: string | none |
+| POST | `/api/v1/checkout/validate-promo` | JWT | visible | none | none | body: dto: PromoValidationRequestDto |
+| POST | `/api/v1/contact` | Public | visible | none | none | body: dto: CreateContactMessageDto |
+| GET | `/api/v1/dashboard/consultations` | JWT | visible | none | none | none |
+| GET | `/api/v1/dashboard/latest-design` | JWT | visible | none | none | none |
+| GET | `/api/v1/dashboard/orders/{orderId:guid}/tracking` | JWT | visible | none | orderId: Guid | none |
+| GET | `/api/v1/dashboard/recent-order` | JWT | visible | none | none | none |
+| GET | `/api/v1/dashboard/saved-items` | JWT | visible | none | none | none |
+| GET | `/api/v1/designs` | JWT | visible | roomType: string? = null, search: string? = null, sortBy: string? = null, page: int = 1, limit: int = 10 | none | none |
+| DELETE | `/api/v1/designs/{id:guid}` | JWT | visible | none | id: Guid | none |
+| GET | `/api/v1/designs/{id:guid}` | JWT | visible | none | id: Guid | none |
+| GET | `/api/v1/designs/{id:guid}/download` | JWT | visible | quality: string = "standard" | id: Guid | none |
+| POST | `/api/v1/designs/{id:guid}/favorite` | JWT | visible | none | id: Guid | none |
+| POST | `/api/v1/designs/{id:guid}/share` | JWT | visible | none | id: Guid | none |
+| PATCH | `/api/v1/designs/{id:guid}/visibility` | JWT | visible | none | id: Guid | body: dto: UpdateDesignVisibilityDto |
+| GET | `/api/v1/flooring` | Public | visible | category: string? = null, materialType: string? = null, minPrice: decimal? = null, maxPrice: decimal? = null, isFeatured: bool? = null, sort: string? = null, page: int = 1, limit: int = 12 | none | none |
+| GET | `/api/v1/materials` | Public | visible | filter: ProductFilterDto | none | none |
+| GET | `/api/v1/materials/{idOrSlug}` | Public | visible | none | idOrSlug: string | none |
+| GET | `/api/v1/orders` | Roles: SuperAdmin | hidden | filter: OrderFilterDto | none | none |
+| POST | `/api/v1/orders` | JWT | visible | none | none | body: dto: CreateOrderDto |
+| GET | `/api/v1/orders/{orderId:guid}` | JWT | visible | none | orderId: Guid | none |
+| GET | `/api/v1/orders/{orderId:guid}/invoice` | JWT | visible | none | orderId: Guid | none |
+| GET | `/api/v1/orders/{orderId:guid}/invoice/document` | JWT | visible | none | orderId: Guid | none |
+| POST | `/api/v1/orders/{orderId}/cancel` | JWT | visible | none | orderId: Guid | body: dto: CancelOrderDto |
+| PUT | `/api/v1/orders/{orderId}/payment` | Roles: SuperAdmin | hidden | none | orderId: Guid | body: dto: UpdatePaymentStatusDto |
+| PUT | `/api/v1/orders/{orderId}/status` | Roles: SuperAdmin | hidden | none | orderId: Guid | body: dto: UpdateOrderStatusDto |
+| GET | `/api/v1/orders/admin/{orderId}` | Roles: SuperAdmin | hidden | none | orderId: Guid | none |
+| GET | `/api/v1/orders/my-orders` | JWT | visible | none | none | none |
+| GET | `/api/v1/orders/number/{orderNumber}` | JWT | visible | none | orderNumber: string | none |
+| GET | `/api/v1/products` | Public | visible | filter: ProductFilterDto | none | none |
+| POST | `/api/v1/products` | Roles: SuperAdmin | visible | none | none | body: dto: CreateProductDto |
+| DELETE | `/api/v1/products/{id}` | Roles: SuperAdmin | visible | none | id: Guid | none |
+| GET | `/api/v1/products/{id}` | Public | visible | none | id: Guid | none |
+| PUT | `/api/v1/products/{id}` | Roles: SuperAdmin | visible | none | id: Guid | body: dto: UpdateProductDto |
+| POST | `/api/v1/products/{id}/images` | Roles: SuperAdmin | visible | none | id: Guid | body: dto: AddProductImageDto |
+| GET | `/api/v1/products/{id}/related` | Public | visible | limit: int = 4 | id: Guid | none |
+| PUT | `/api/v1/products/{productId}/images/{imageId}/primary` | Roles: SuperAdmin | visible | none | productId: Guid, imageId: Guid | none |
+| GET | `/api/v1/products/featured` | Public | visible | brandType: int? = null, limit: int = 10 | none | none |
+| DELETE | `/api/v1/products/images/{imageId}` | Roles: SuperAdmin | visible | none | imageId: Guid | none |
+| GET | `/api/v1/products/slug/{slug}` | Public | visible | none | slug: string | none |
+| GET | `/api/v1/public/projects` | Public | visible | page: int = 1, limit: int = 12, roomType: string? = null, search: string? = null, sort: string? = null | none | none |
+| GET | `/api/v1/saved` | JWT | visible | category: string? = null, search: string? = null, sortBy: string? = null, page: int = 1, limit: int = 10 | none | none |
+| POST | `/api/v1/saved` | JWT | visible | none | none | body: request: SaveItemRequest |
+| DELETE | `/api/v1/saved/{id:guid}` | JWT | visible | none | id: Guid | none |
+| POST | `/api/v1/saved/{id:guid}/add-to-cart` | JWT | visible | none | id: Guid | body: request: AddSavedToCartRequest |
+| POST | `/api/v1/saved/{id:guid}/add-to-moodboard` | JWT | visible | none | id: Guid | body: request: AddToMoodboardRequest |
+| POST | `/api/v1/saved/buy-all` | JWT | visible | none | none | body: request: BuyAllRequest |
+| POST | `/api/v1/saved/create-board` | JWT | visible | none | none | body: request: CreateBoardRequest |
+| GET | `/api/v1/vendor/activity` | Roles: Vendor | visible | filter: string? = "all", page: int = 1, pageSize: int = 20 | none | none |
+| GET | `/api/v1/vendor/alerts` | Roles: Vendor | visible | none | none | none |
+| GET | `/api/v1/vendor/dashboard` | Roles: Vendor | visible | none | none | none |
+| GET | `/api/v1/vendor/deliveries` | Roles: Vendor | visible | page: int = 1, pageSize: int = 20, status: OrderStatus? = null | none | none |
+| GET | `/api/v1/vendor/inventory` | Roles: Vendor | visible | page: int = 1, pageSize: int = 20, search: string? = null, lowStockOnly: bool = false | none | none |
+| PUT | `/api/v1/vendor/inventory/{productId:guid}` | Roles: Vendor | visible | none | productId: Guid | body: request: VendorInventoryUpdateRequest |
+| POST | `/api/v1/vendor/inventory/products` | Roles: Vendor | visible | none | none | body: request: VendorInventoryCreateRequest |
+| DELETE | `/api/v1/vendor/inventory/products/{productId:guid}` | Roles: Vendor | visible | none | productId: Guid | none |
+| GET | `/api/v1/vendor/inventory/stats` | Roles: Vendor | visible | none | none | none |
+| GET | `/api/v1/vendor/messages` | Roles: Vendor | visible | page: int = 1, pageSize: int = 20, unreadOnly: bool = false | none | none |
+| POST | `/api/v1/vendor/messages` | Roles: Vendor | visible | none | none | body: request: VendorMessageCreateRequest |
+| GET | `/api/v1/vendor/notifications` | Roles: Vendor | visible | page: int = 1, pageSize: int = 20, unreadOnly: bool = false | none | none |
+| PATCH | `/api/v1/vendor/notifications/{notificationId}/read` | Roles: Vendor | visible | none | notificationId: string | none |
+| PUT | `/api/v1/vendor/notifications/mark-all-read` | Roles: Vendor | visible | none | none | none |
+| GET | `/api/v1/vendor/orders` | Roles: Vendor | visible | page: int = 1, pageSize: int = 20, status: OrderStatus? = null, search: string? = null, fromDate: DateTime? = null, toDate: DateTime? = null, assignedOnly: bool = false, type: string? = null | none | none |
+| GET | `/api/v1/vendor/orders/{orderId:guid}` | Roles: Vendor | visible | none | orderId: Guid | none |
+| PATCH | `/api/v1/vendor/orders/{orderId:guid}/assignment` | Roles: Vendor | visible | none | orderId: Guid | body: request: VendorOrderAssignmentRequest |
+| POST | `/api/v1/vendor/orders/{orderId:guid}/notes` | Roles: Vendor | visible | none | orderId: Guid | body: request: VendorOrderNoteRequest |
+| PATCH | `/api/v1/vendor/orders/{orderId:guid}/status` | Roles: Vendor | visible | none | orderId: Guid | body: request: VendorOrderStatusUpdateRequest |
+| GET | `/api/v1/vendor/orders/export` | Roles: Vendor | visible | status: OrderStatus? = null, search: string? = null, fromDate: DateTime? = null, toDate: DateTime? = null, assignedOnly: bool = false, type: string? = null | none | none |
+| POST | `/api/v1/vendor/orders/import` | Roles: Vendor | visible | none | none | form: file: IFormFile |
+| POST | `/api/webhooks/paystack` | Public | visible | none | none | none |
+| GET | `/materials` | Public | visible | category: string? = null, materialType: string? = null, minPrice: decimal? = null, maxPrice: decimal? = null, isFeatured: bool? = null, sort: string? = null, page: int = 1, limit: int = 12 | none | none |
+| GET | `/materials/{id}` | Public | visible | none | id: string | none |
+
+## 3. Endpoint Reference
+
+### 3.1 AccountController
+
+Controller file: `src/TBM.API/Controllers/V1/AccountController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| DELETE | `/api/v1/account` | JWT | visible | none | none | body: request: OptionalPasswordRequest | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/account/addresses` | JWT | visible | none | none | body: request: AddressRequest | application/json | DynamicPolicy | none |  |
+| DELETE | `/api/v1/account/addresses/{addressId:guid}` | JWT | visible | none | addressId: Guid | none | application/json | DynamicPolicy | none |  |
+| PUT | `/api/v1/account/addresses/{addressId:guid}` | JWT | visible | none | addressId: Guid | body: request: AddressRequest | application/json | DynamicPolicy | none |  |
+| PUT | `/api/v1/account/addresses/{addressId:guid}/default` | JWT | visible | none | addressId: Guid | none | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/account/avatar` | JWT | visible | none | none | form: request: UploadAvatarRequest | application/json | DynamicPolicy | 10_000_000 |  |
+| GET | `/api/v1/account/brand-access` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/account/deactivate` | JWT | visible | none | none | body: request: OptionalPasswordRequest | application/json | DynamicPolicy | none |  |
+| PUT | `/api/v1/account/email` | JWT | visible | none | none | body: request: UpdateEmailRequest | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/account/me` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| PATCH | `/api/v1/account/me` | JWT | visible | none | none | body: request: UpdateMeRequest | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/account/notifications` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| PUT | `/api/v1/account/notifications` | JWT | visible | none | none | body: state: NotificationPreferenceState | application/json | DynamicPolicy | none |  |
+| PUT | `/api/v1/account/password` | JWT | visible | none | none | body: request: UpdatePasswordRequest | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/account/password/change` | JWT | visible | none | none | body: request: ChangePasswordRequest | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/account/password/otp/request` | JWT | visible | none | none | body: request: PasswordOtpRequest | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/account/password/otp/verify` | JWT | visible | none | none | body: request: VerifyPasswordOtpRequest | application/json | DynamicPolicy | none |  |
+| PUT | `/api/v1/account/phone` | JWT | visible | none | none | body: request: UpdatePhoneRequest | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/account/profile` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| PUT | `/api/v1/account/profile` | JWT | visible | none | none | body: request: UpdateProfileRequest | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/account/security` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| PUT | `/api/v1/account/security/2fa` | JWT | visible | none | none | body: request: UpdateTwoFactorRequest | application/json | DynamicPolicy | none |  |
+
+### 3.2 AdminAIController
+
+Controller file: `src/TBM.API/Controllers/V1/Admin/AdminAIController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/admin/ai/credits/{userId:guid}` | Roles: Admin,SuperAdmin | visible | none | userId: Guid | none | application/json | none | none |  |
+| POST | `/api/admin/ai/credits/adjust` | Roles: Admin,SuperAdmin | visible | none | none | body: request: AICreditAdjustmentRequestDto | application/json | none | none |  |
+| GET | `/api/admin/ai/usage/monthly-spend` | Roles: Admin,SuperAdmin | visible | months: int = 6 | none | none | application/json | none | none |  |
+| GET | `/api/admin/ai/usage/user/{userId:guid}` | Roles: Admin,SuperAdmin | visible | year: int? = null, month: int? = null | userId: Guid | none | application/json | none | none |  |
+
+### 3.3 AdminAnalyticsController
+
+Controller file: `src/TBM.API/Controllers/V1/AdminAnalyticsController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/admin/analytics/monthly-revenue` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | none | none |  |
+| GET | `/api/admin/analytics/overview` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | none | none |  |
+| GET | `/api/admin/analytics/payment-distribution` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | none | none |  |
+
+### 3.4 AdminAuthController
+
+Controller file: `src/TBM.API/Controllers/V1/Admin/AdminAuthController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| POST | `/api/admin/auth/login` | Public | visible | none | none | body: dto: AdminLoginDto | application/json | DynamicPolicy | none |  |
+| POST | `/api/admin/auth/logout` | Roles: Admin,SuperAdmin | visible | none | none | body: dto: RefreshTokenDto | application/json | DynamicPolicy | none |  |
+| POST | `/api/admin/auth/refresh` | Public | visible | none | none | body: dto: RefreshTokenDto | application/json | DynamicPolicy | none |  |
+
+### 3.5 AdminDashboardController
+
+Controller file: `src/TBM.API/Controllers/V1/Admin/AdminDashboardController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/admin/dashboard/alerts` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | none | none |  |
+| POST | `/api/admin/dashboard/export` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | none | none |  |
+| GET | `/api/admin/dashboard/quick-actions` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | none | none |  |
+| POST | `/api/admin/dashboard/refresh` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | none | none |  |
+| GET | `/api/admin/dashboard/revenue` | Roles: Admin,SuperAdmin | visible | timeRange: string? = "30d" | none | none | application/json | none | none |  |
+| GET | `/api/admin/dashboard/server-load` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | none | none |  |
+| GET | `/api/admin/dashboard/stats` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | none | none |  |
+
+### 3.6 AdminFinancialController
+
+Controller file: `src/TBM.API/Controllers/V1/Admin/AdminFinancialController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/admin/financial/export` | Roles: Admin,SuperAdmin | visible | search: string? = null, filter: string? = null | none | none | application/json | none | none |  |
+| GET | `/api/admin/financial/monthly-revenue` | Roles: Admin,SuperAdmin | visible | months: int = 12 | none | none | application/json | none | none |  |
+| GET | `/api/admin/financial/revenue-by-service` | Roles: Admin,SuperAdmin | visible | dateRange: string? = null | none | none | application/json | none | none |  |
+| GET | `/api/admin/financial/stats` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | none | none |  |
+| GET | `/api/admin/financial/transactions` | Roles: Admin,SuperAdmin | visible | page: int = 1, limit: int = 20, search: string? = null, filter: string? = null | none | none | application/json | none | none |  |
+
+### 3.7 AdminObservabilityController
+
+Controller file: `src/TBM.API/Controllers/V1/Admin/AdminObservabilityController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/admin/observability/slo/{domain}` | Roles: Admin,SuperAdmin | visible | none | domain: string | none | application/json | DynamicPolicy | none |  |
+| GET | `/api/admin/observability/slo/overview` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | DynamicPolicy | none |  |
+
+### 3.8 AdminOrdersController
+
+Controller file: `src/TBM.API/Controllers/V1/Admin/AdminOrdersController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/admin/orders` | Roles: Admin,SuperAdmin | visible | page: int = 1, pageSize: int = 20, status: OrderStatus? = null, search: string? = null | none | none | application/json | none | none |  |
+| PATCH | `/api/admin/orders/{id}/cancel` | Roles: Admin,SuperAdmin | visible | none | id: Guid | body: reason: string | application/json | none | none |  |
+| POST | `/api/admin/orders/{id}/refund` | Roles: Admin,SuperAdmin | visible | none | id: Guid | body: reason: string | application/json | none | none |  |
+| PATCH | `/api/admin/orders/{id}/status` | Roles: Admin,SuperAdmin | visible | none | id: Guid | body: newStatus: OrderStatus | application/json | none | none |  |
+| PATCH | `/api/admin/orders/{id}/tracking` | Roles: Admin,SuperAdmin | visible | none | id: Guid | body: dto: TrackingDto | application/json | none | none |  |
+
+### 3.9 AdminSettingsController
+
+Controller file: `src/TBM.API/Controllers/V1/Admin/AdminSettingsController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| PUT | `/api/admin/settings` | Roles: Admin,SuperAdmin | visible | none | none | body: dto: LegacyAdminSettingsFormDto | application/json | DynamicPolicy | none |  |
+| GET | `/api/admin/settings/ai` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| PUT | `/api/admin/settings/ai` | Roles: Admin,SuperAdmin | visible | none | none | body: dto: AISettingsDto | application/json | DynamicPolicy | none |  |
+| PATCH | `/api/admin/settings/ai/models/{modelId}` | Roles: Admin,SuperAdmin | visible | none | modelId: string | body: dto: ToggleEnabledDto | application/json | DynamicPolicy | none |  |
+| GET | `/api/admin/settings/general` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| PUT | `/api/admin/settings/general` | Roles: Admin,SuperAdmin | visible | none | none | body: dto: GeneralSettingsDto | application/json | DynamicPolicy | none |  |
+| GET | `/api/admin/settings/notifications` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| PUT | `/api/admin/settings/notifications` | Roles: Admin,SuperAdmin | visible | none | none | body: dto: AdminNotificationSettingsDto | application/json | DynamicPolicy | none |  |
+| GET | `/api/admin/settings/payment` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| PUT | `/api/admin/settings/payment` | Roles: Admin,SuperAdmin | visible | none | none | body: dto: PaymentSettingsDto | application/json | DynamicPolicy | none |  |
+| PATCH | `/api/admin/settings/payment/gateways/{gatewayId}` | Roles: Admin,SuperAdmin | visible | none | gatewayId: string | body: dto: ToggleEnabledDto | application/json | DynamicPolicy | none |  |
+
+### 3.10 AdminSystemLogsController
+
+Controller file: `src/TBM.API/Controllers/V1/Admin/AdminSystemLogsController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/admin/system-logs` | Roles: Admin,SuperAdmin | visible | page: int = 1, limit: int = 20, search: string? = null, severity: string? = null, dateRange: string? = null | none | none | application/json | none | none |  |
+| GET | `/api/admin/system-logs/export` | Roles: Admin,SuperAdmin | visible | severity: string? = null, search: string? = null, dateRange: string? = null | none | none | application/json | none | none |  |
+| GET | `/api/admin/system-logs/stats` | Roles: Admin,SuperAdmin | visible | dateRange: string? = null | none | none | application/json | none | none |  |
+
+### 3.11 AdminUsersController
+
+Controller file: `src/TBM.API/Controllers/V1/Admin/AdminUsersController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/admin/users` | Roles: Admin,SuperAdmin | visible | page: int = 1 | none | none | application/json | none | none |  |
+| POST | `/api/admin/users` | Roles: Admin,SuperAdmin | visible | none | none | body: request: AdminCreateUserRequestDto | application/json | none | none |  |
+| GET | `/api/admin/users/{id:guid}` | Roles: Admin,SuperAdmin | visible | none | id: Guid | none | application/json | none | none |  |
+| PATCH | `/api/admin/users/{id:guid}/role` | Roles: Admin,SuperAdmin | visible | none | id: Guid | body: request: AdminUpdateUserRoleRequestDto | application/json | none | none |  |
+| PATCH | `/api/admin/users/{id:guid}/status` | Roles: Admin,SuperAdmin | visible | none | id: Guid | body: request: AdminUpdateUserStatusRequestDto | application/json | none | none |  |
+| DELETE | `/api/admin/users/{id}` | Roles: Admin,SuperAdmin | visible | none | id: Guid | none | application/json | none | none |  |
+| PATCH | `/api/admin/users/{id}/reactivate` | Roles: Admin,SuperAdmin | visible | none | id: Guid | none | application/json | none | none |  |
+| PATCH | `/api/admin/users/{id}/suspend` | Roles: Admin,SuperAdmin | visible | none | id: Guid | none | application/json | none | none |  |
+| GET | `/api/admin/users/export` | Roles: Admin,SuperAdmin | visible | none | none | none | application/json | none | none |  |
+
+### 3.12 AdminVendorsController
+
+Controller file: `src/TBM.API/Controllers/V1/Admin/AdminVendorsController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| POST | `/api/admin/vendors/{userId:guid}/activate` | Roles: Admin,SuperAdmin | visible | none | userId: Guid | body: request: ActivateVendorRequest | application/json | none | none |  |
+| GET | `/api/admin/vendors/{vendorUserId:guid}/ownership` | Roles: Admin,SuperAdmin | visible | none | vendorUserId: Guid | none | application/json | none | none |  |
+| DELETE | `/api/admin/vendors/products/{productId:guid}/assign` | Roles: Admin,SuperAdmin | visible | none | productId: Guid | none | application/json | none | none |  |
+| POST | `/api/admin/vendors/products/{productId:guid}/assign` | Roles: Admin,SuperAdmin | visible | none | productId: Guid | body: request: AssignProductOwnerRequest | application/json | none | none |  |
+
+### 3.13 AIAssistantController
+
+Controller file: `src/TBM.API/Controllers/V1/AI/AIAssistantController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| POST | `/api/v1/ai/assistant/message` | JWT | visible | none | none | body: request: AssistantMessageRequestDto | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/ai/assistant/sessions` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/ai/assistant/sessions/{sessionId:guid}` | JWT | visible | none | sessionId: Guid | none | application/json | DynamicPolicy | none |  |
+| PATCH | `/api/v1/ai/assistant/tasks/{taskId:guid}` | JWT | visible | none | taskId: Guid | body: request: UpdateAssistantTaskStatusRequestDto | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/ai/assistant/tool-actions/{actionId:guid}` | JWT | visible | none | actionId: Guid | none | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/ai/assistant/tool-actions/{actionId:guid}/approval` | JWT | visible | none | actionId: Guid | body: request: ApproveAssistantToolActionRequestDto | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/ai/assistant/tool-actions/{actionId:guid}/execute` | JWT | visible | none | actionId: Guid | body: request: ExecuteAssistantToolActionRequestDto | application/json | DynamicPolicy | none |  |
+
+### 3.14 AIController
+
+Controller file: `src/TBM.API/Controllers/V1/AI/AIController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/v1/ai/credits/balance` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/ai/generate/image` | JWT | visible | none | none | body: dto: GenerateImageDto | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/ai/generate/video` | JWT | visible | none | none | body: dto: GenerateVideoDto | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/ai/projects` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/ai/projects` | JWT | visible | none | none | body: dto: CreateAIProjectDto | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/ai/transform/image` | JWT | visible | none | none | body: dto: GenerateImageDto | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/ai/usage/summary` | JWT | visible | year: int? = null, month: int? = null | none | none | application/json | DynamicPolicy | none |  |
+
+### 3.15 AIRenovationEstimatorController
+
+Controller file: `src/TBM.API/Controllers/V1/AI/AIRenovationEstimatorController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| POST | `/api/v1/ai/renovation/estimate` | JWT | visible | none | none | body: request: CreateRenovationEstimateRequestDto | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/ai/renovation/estimates` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/ai/renovation/estimates/{estimateId:guid}` | JWT | visible | none | estimateId: Guid | none | application/json | DynamicPolicy | none |  |
+
+### 3.16 AIUploadController
+
+Controller file: `src/TBM.API/Controllers/V1/AI/AIUploadController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| POST | `/api/v1/ai/upload-room` | JWT | visible | none | none | form: file: IFormFile | multipart/form-data | DynamicPolicy | none |  |
+
+### 3.17 AuthController
+
+Controller file: `src/TBM.API/Controllers/V1/AuthController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/v1/auth/apple` | Public | visible | none | none | none | application/json | DynamicPolicy | none | Apple OAuth is currently not configured on this backend. |
+| POST | `/api/v1/auth/forgot-password` | Public | visible | none | none | body: dto: ForgotPasswordDto | application/json | DynamicPolicy | none | Request password reset email |
+| GET | `/api/v1/auth/google` | Public | visible | none | none | none | application/json | DynamicPolicy | none | Google OAuth is currently not configured on this backend. |
+| POST | `/api/v1/auth/login` | Public | visible | none | none | body: dto: LoginDto | application/json | DynamicPolicy | none | Login with email and password |
+| POST | `/api/v1/auth/logout` | JWT | visible | none | none | none | application/json | DynamicPolicy | none | Logout (client should discard tokens) |
+| GET | `/api/v1/auth/me` | JWT | visible | none | none | none | application/json | DynamicPolicy | none | Get current authenticated user info |
+| GET | `/api/v1/auth/providers` | Public | visible | none | none | none | application/json | DynamicPolicy | none | Returns configured social auth provider capability flags. |
+| POST | `/api/v1/auth/refresh-token` | Public | visible | none | none | body: dto: RefreshTokenDto | application/json | DynamicPolicy | none | Refresh access token using refresh token |
+| POST | `/api/v1/auth/register` | Public | visible | none | none | body: dto: RegisterDto | application/json | DynamicPolicy | none | Register a new user account |
+| POST | `/api/v1/auth/resend-verification` | Public | visible | none | none | body: dto: ForgotPasswordDto | application/json | DynamicPolicy | none | Resend email verification link |
+| POST | `/api/v1/auth/reset-password` | Public | visible | none | none | body: dto: ResetPasswordDto | application/json | DynamicPolicy | none | Reset password with token |
+| GET | `/api/v1/auth/verify-email` | Public | visible | token: string? | none | none | application/json | DynamicPolicy | none | Verify email address with token query OR body payload { email, code } |
+| POST | `/api/v1/auth/verify-email` | Public | visible | token: string? | none | none | application/json | DynamicPolicy | none | Verify email address with token query parameter |
+
+### 3.18 CartController
+
+Controller file: `src/TBM.API/Controllers/V1/CartController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| POST | `/api/cart/merge` | JWT | visible | none | none | body: dto: MergeCartRequestDto | application/json | DynamicPolicy | none | Compatibility endpoint for frontend route: /api/cart/merge |
+| DELETE | `/api/v1/cart` | JWT | visible | none | none | none | application/json | DynamicPolicy | none | Clear all items from cart |
+| GET | `/api/v1/cart` | JWT | visible | none | none | none | application/json | DynamicPolicy | none | Get current user's cart |
+| GET | `/api/v1/cart/api/cart` | JWT | visible | none | none | none | application/json | DynamicPolicy | none | Compatibility endpoint for frontend route: /api/cart |
+| POST | `/api/v1/cart/api/cart/add` | JWT | visible | none | none | body: dto: AddToCartDto | application/json | DynamicPolicy | none | Compatibility endpoint for frontend route: /api/cart/add |
+| DELETE | `/api/v1/cart/api/cart/items/{itemId:guid}` | JWT | visible | none | itemId: Guid | none | application/json | DynamicPolicy | none | Compatibility endpoint for frontend route: /api/cart/items/:itemId |
+| PUT | `/api/v1/cart/api/cart/items/{itemId:guid}` | JWT | visible | none | itemId: Guid | body: dto: UpdateCartItemDto | application/json | DynamicPolicy | none | Compatibility endpoint for frontend route: /api/cart/items/:itemId |
+| POST | `/api/v1/cart/apply-promo` | JWT | visible | none | none | body: dto: PromoValidationRequestDto | application/json | DynamicPolicy | none | Apply promo code to current cart |
+| POST | `/api/v1/cart/items` | JWT | visible | none | none | body: dto: AddToCartDto | application/json | DynamicPolicy | none | Add item to cart |
+| DELETE | `/api/v1/cart/items/{itemId}` | JWT | visible | none | itemId: Guid | none | application/json | DynamicPolicy | none | Remove item from cart |
+| PUT | `/api/v1/cart/items/{itemId}` | JWT | visible | none | itemId: Guid | body: dto: UpdateCartItemDto | application/json | DynamicPolicy | none | Update cart item quantity |
+| POST | `/api/v1/cart/merge` | JWT | visible | none | none | body: dto: MergeCartRequestDto | application/json | DynamicPolicy | none | Merge guest cart items into authenticated user's persistent cart |
+| GET | `/api/v1/cart/related` | JWT | visible | limit: int = 4 | none | none | application/json | DynamicPolicy | none | Get related products based on items currently in cart |
+
+### 3.19 CategoriesController
+
+Controller file: `src/TBM.API/Controllers/V1/CategoriesController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/v1/categories` | Public | visible | none | none | none | application/json | DynamicPolicy | none | Get all categories |
+| POST | `/api/v1/categories` | Roles: SuperAdmin | visible | none | none | body: dto: CreateCategoryDto | application/json | DynamicPolicy | none | Create a new category (Admin only) |
+| DELETE | `/api/v1/categories/{id}` | Roles: SuperAdmin | visible | none | id: Guid | none | application/json | DynamicPolicy | none | Delete a category (Admin only) |
+| GET | `/api/v1/categories/{id}` | Public | visible | none | id: Guid | none | application/json | DynamicPolicy | none | Get category by ID |
+| PUT | `/api/v1/categories/{id}` | Roles: SuperAdmin | visible | none | id: Guid | body: dto: UpdateCategoryDto | application/json | DynamicPolicy | none | Update a category (Admin only) |
+| GET | `/api/v1/categories/brand/{brandType}` | Public | visible | none | brandType: int | none | application/json | DynamicPolicy | none | Get categories by brand (1=TBM, 2=Bogat) |
+| GET | `/api/v1/categories/slug/{slug}` | Public | visible | none | slug: string | none | application/json | DynamicPolicy | none | Get category by slug |
+
+### 3.20 CheckoutController
+
+Controller file: `src/TBM.API/Controllers/V1/CheckoutController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/v1/checkout` | JWT | visible | promoCode: string? = null | none | none | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/checkout/payment` | JWT | visible | none | none | body: dto: CheckoutPaymentRequestDto | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/checkout/payment/paystack/verify/{reference}` | JWT | visible | none | reference: string | none | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/checkout/validate-promo` | JWT | visible | none | none | body: dto: PromoValidationRequestDto | application/json | DynamicPolicy | none |  |
+
+### 3.21 ContactController
+
+Controller file: `src/TBM.API/Controllers/V1/ContactController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| POST | `/api/v1/contact` | Public | visible | none | none | body: dto: CreateContactMessageDto | application/json | DynamicPolicy | none |  |
+
+### 3.22 DashboardController
+
+Controller file: `src/TBM.API/Controllers/V1/DashboardController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/v1/dashboard/consultations` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/dashboard/latest-design` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/dashboard/orders/{orderId:guid}/tracking` | JWT | visible | none | orderId: Guid | none | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/dashboard/recent-order` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/dashboard/saved-items` | JWT | visible | none | none | none | application/json | DynamicPolicy | none |  |
+
+### 3.23 DesignsController
+
+Controller file: `src/TBM.API/Controllers/V1/DesignsController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/v1/designs` | JWT | visible | roomType: string? = null, search: string? = null, sortBy: string? = null, page: int = 1, limit: int = 10 | none | none | application/json | DynamicPolicy | none |  |
+| DELETE | `/api/v1/designs/{id:guid}` | JWT | visible | none | id: Guid | none | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/designs/{id:guid}` | JWT | visible | none | id: Guid | none | application/json | DynamicPolicy | none |  |
+| GET | `/api/v1/designs/{id:guid}/download` | JWT | visible | quality: string = "standard" | id: Guid | none | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/designs/{id:guid}/favorite` | JWT | visible | none | id: Guid | none | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/designs/{id:guid}/share` | JWT | visible | none | id: Guid | none | application/json | DynamicPolicy | none |  |
+| PATCH | `/api/v1/designs/{id:guid}/visibility` | JWT | visible | none | id: Guid | body: dto: UpdateDesignVisibilityDto | application/json | DynamicPolicy | none |  |
+
+### 3.24 OrdersController
+
+Controller file: `src/TBM.API/Controllers/V1/OrdersController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/orders` | JWT | hidden | none | none | none | application/json | DynamicPolicy | none | Compatibility endpoint for frontend route: /api/orders |
+| GET | `/api/orders/{orderId:guid}` | JWT | hidden | none | orderId: Guid | none | application/json | DynamicPolicy | none | Compatibility endpoint for frontend route: /api/orders/:orderId |
+| GET | `/api/orders/{orderId:guid}/invoice` | JWT | hidden | none | orderId: Guid | none | application/json | DynamicPolicy | none | Compatibility endpoint for frontend route: /api/orders/:orderId/invoice |
+| GET | `/api/v1/orders` | Roles: SuperAdmin | hidden | filter: OrderFilterDto | none | none | application/json | DynamicPolicy | none | Get all orders with filters (Admin only) |
+| POST | `/api/v1/orders` | JWT | visible | none | none | body: dto: CreateOrderDto | application/json | DynamicPolicy | none | Create order from cart |
+| GET | `/api/v1/orders/{orderId:guid}` | JWT | visible | none | orderId: Guid | none | application/json | DynamicPolicy | none | Get order by ID (user's own order) |
+| GET | `/api/v1/orders/{orderId:guid}/invoice` | JWT | visible | none | orderId: Guid | none | application/json | DynamicPolicy | none | Get invoice URL for a user order |
+| GET | `/api/v1/orders/{orderId:guid}/invoice/document` | JWT | visible | none | orderId: Guid | none | application/json | DynamicPolicy | none | Get invoice data for a user order |
+| POST | `/api/v1/orders/{orderId}/cancel` | JWT | visible | none | orderId: Guid | body: dto: CancelOrderDto | application/json | DynamicPolicy | none | Cancel order (customer) |
+| PUT | `/api/v1/orders/{orderId}/payment` | Roles: SuperAdmin | hidden | none | orderId: Guid | body: dto: UpdatePaymentStatusDto | application/json | DynamicPolicy | none | Update payment status (Admin only) |
+| PUT | `/api/v1/orders/{orderId}/status` | Roles: SuperAdmin | hidden | none | orderId: Guid | body: dto: UpdateOrderStatusDto | application/json | DynamicPolicy | none | Update order status (Admin only) |
+| GET | `/api/v1/orders/admin/{orderId}` | Roles: SuperAdmin | hidden | none | orderId: Guid | none | application/json | DynamicPolicy | none | Get order by ID (Admin - any order) |
+| GET | `/api/v1/orders/my-orders` | JWT | visible | none | none | none | application/json | DynamicPolicy | none | Get current user's orders |
+| GET | `/api/v1/orders/number/{orderNumber}` | JWT | visible | none | orderNumber: string | none | application/json | DynamicPolicy | none | Get order by order number |
+
+### 3.25 PaystackWebhookController
+
+Controller file: `src/TBM.API/Controllers/V1/Payments/PaystackWebhookController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| POST | `/api/webhooks/paystack` | Public | visible | none | none | none | application/json | WebhookPolicy | none |  |
+
+### 3.26 ProductsController
+
+Controller file: `src/TBM.API/Controllers/V1/ProductsController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/v1/flooring` | Public | visible | category: string? = null, materialType: string? = null, minPrice: decimal? = null, maxPrice: decimal? = null, isFeatured: bool? = null, sort: string? = null, page: int = 1, limit: int = 12 | none | none | application/json | DynamicPolicy | none | Compatibility endpoint for frontend local route: /api/flooring |
+| GET | `/api/v1/materials` | Public | visible | filter: ProductFilterDto | none | none | application/json | DynamicPolicy | none | Alias for materials listing using canonical product filters |
+| GET | `/api/v1/materials/{idOrSlug}` | Public | visible | none | idOrSlug: string | none | application/json | DynamicPolicy | none | Alias for materials detail using slug or GUID |
+| GET | `/api/v1/products` | Public | visible | filter: ProductFilterDto | none | none | application/json | DynamicPolicy | none | Get products with filtering and pagination |
+| POST | `/api/v1/products` | Roles: SuperAdmin | visible | none | none | body: dto: CreateProductDto | application/json | DynamicPolicy | none | Create a new product (Admin only) |
+| DELETE | `/api/v1/products/{id}` | Roles: SuperAdmin | visible | none | id: Guid | none | application/json | DynamicPolicy | none | Delete a product (Admin only) |
+| GET | `/api/v1/products/{id}` | Public | visible | none | id: Guid | none | application/json | DynamicPolicy | none | Get product by ID |
+| PUT | `/api/v1/products/{id}` | Roles: SuperAdmin | visible | none | id: Guid | body: dto: UpdateProductDto | application/json | DynamicPolicy | none | Update a product (Admin only) |
+| POST | `/api/v1/products/{id}/images` | Roles: SuperAdmin | visible | none | id: Guid | body: dto: AddProductImageDto | application/json | DynamicPolicy | none | Add image to product (Admin only) |
+| GET | `/api/v1/products/{id}/related` | Public | visible | limit: int = 4 | id: Guid | none | application/json | DynamicPolicy | none | Get related products |
+| PUT | `/api/v1/products/{productId}/images/{imageId}/primary` | Roles: SuperAdmin | visible | none | productId: Guid, imageId: Guid | none | application/json | DynamicPolicy | none | Set primary image for product (Admin only) |
+| GET | `/api/v1/products/featured` | Public | visible | brandType: int? = null, limit: int = 10 | none | none | application/json | DynamicPolicy | none | Get featured products |
+| DELETE | `/api/v1/products/images/{imageId}` | Roles: SuperAdmin | visible | none | imageId: Guid | none | application/json | DynamicPolicy | none | Delete product image (Admin only) |
+| GET | `/api/v1/products/slug/{slug}` | Public | visible | none | slug: string | none | application/json | DynamicPolicy | none | Get product by slug |
+| GET | `/materials` | Public | visible | category: string? = null, materialType: string? = null, minPrice: decimal? = null, maxPrice: decimal? = null, isFeatured: bool? = null, sort: string? = null, page: int = 1, limit: int = 12 | none | none | application/json | DynamicPolicy | none | Compatibility endpoint for frontend route: /materials |
+| GET | `/materials/{id}` | Public | visible | none | id: string | none | application/json | DynamicPolicy | none | Compatibility endpoint for frontend route: /materials/:id |
+
+### 3.27 PublicProjectsController
+
+Controller file: `src/TBM.API/Controllers/V1/PublicProjectsController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/v1/public/projects` | Public | visible | page: int = 1, limit: int = 12, roomType: string? = null, search: string? = null, sort: string? = null | none | none | application/json | DynamicPolicy | none |  |
+
+### 3.28 SavedController
+
+Controller file: `src/TBM.API/Controllers/V1/SavedController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/v1/saved` | JWT | visible | category: string? = null, search: string? = null, sortBy: string? = null, page: int = 1, limit: int = 10 | none | none | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/saved` | JWT | visible | none | none | body: request: SaveItemRequest | application/json | DynamicPolicy | none |  |
+| DELETE | `/api/v1/saved/{id:guid}` | JWT | visible | none | id: Guid | none | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/saved/{id:guid}/add-to-cart` | JWT | visible | none | id: Guid | body: request: AddSavedToCartRequest | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/saved/{id:guid}/add-to-moodboard` | JWT | visible | none | id: Guid | body: request: AddToMoodboardRequest | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/saved/buy-all` | JWT | visible | none | none | body: request: BuyAllRequest | application/json | DynamicPolicy | none |  |
+| POST | `/api/v1/saved/create-board` | JWT | visible | none | none | body: request: CreateBoardRequest | application/json | DynamicPolicy | none |  |
+
+### 3.29 VendorController
+
+Controller file: `src/TBM.API/Controllers/V1/VendorController.cs`
+
+| Method | Path | Auth | Swagger | Query | Route | Body/Form | Consumes | Rate Limit | Request Size | Summary |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GET | `/api/v1/vendor/activity` | Roles: Vendor | visible | filter: string? = "all", page: int = 1, pageSize: int = 20 | none | none | application/json | none | none |  |
+| GET | `/api/v1/vendor/alerts` | Roles: Vendor | visible | none | none | none | application/json | none | none |  |
+| GET | `/api/v1/vendor/dashboard` | Roles: Vendor | visible | none | none | none | application/json | none | none |  |
+| GET | `/api/v1/vendor/deliveries` | Roles: Vendor | visible | page: int = 1, pageSize: int = 20, status: OrderStatus? = null | none | none | application/json | none | none |  |
+| GET | `/api/v1/vendor/inventory` | Roles: Vendor | visible | page: int = 1, pageSize: int = 20, search: string? = null, lowStockOnly: bool = false | none | none | application/json | none | none |  |
+| PUT | `/api/v1/vendor/inventory/{productId:guid}` | Roles: Vendor | visible | none | productId: Guid | body: request: VendorInventoryUpdateRequest | application/json | none | none |  |
+| POST | `/api/v1/vendor/inventory/products` | Roles: Vendor | visible | none | none | body: request: VendorInventoryCreateRequest | application/json | none | none |  |
+| DELETE | `/api/v1/vendor/inventory/products/{productId:guid}` | Roles: Vendor | visible | none | productId: Guid | none | application/json | none | none |  |
+| GET | `/api/v1/vendor/inventory/stats` | Roles: Vendor | visible | none | none | none | application/json | none | none |  |
+| GET | `/api/v1/vendor/messages` | Roles: Vendor | visible | page: int = 1, pageSize: int = 20, unreadOnly: bool = false | none | none | application/json | none | none |  |
+| POST | `/api/v1/vendor/messages` | Roles: Vendor | visible | none | none | body: request: VendorMessageCreateRequest | application/json | none | none |  |
+| GET | `/api/v1/vendor/notifications` | Roles: Vendor | visible | page: int = 1, pageSize: int = 20, unreadOnly: bool = false | none | none | application/json | none | none |  |
+| PATCH | `/api/v1/vendor/notifications/{notificationId}/read` | Roles: Vendor | visible | none | notificationId: string | none | application/json | none | none |  |
+| PUT | `/api/v1/vendor/notifications/mark-all-read` | Roles: Vendor | visible | none | none | none | application/json | none | none |  |
+| GET | `/api/v1/vendor/orders` | Roles: Vendor | visible | page: int = 1, pageSize: int = 20, status: OrderStatus? = null, search: string? = null, fromDate: DateTime? = null, toDate: DateTime? = null, assignedOnly: bool = false, type: string? = null | none | none | application/json | none | none |  |
+| GET | `/api/v1/vendor/orders/{orderId:guid}` | Roles: Vendor | visible | none | orderId: Guid | none | application/json | none | none |  |
+| PATCH | `/api/v1/vendor/orders/{orderId:guid}/assignment` | Roles: Vendor | visible | none | orderId: Guid | body: request: VendorOrderAssignmentRequest | application/json | none | none |  |
+| POST | `/api/v1/vendor/orders/{orderId:guid}/notes` | Roles: Vendor | visible | none | orderId: Guid | body: request: VendorOrderNoteRequest | application/json | none | none |  |
+| PATCH | `/api/v1/vendor/orders/{orderId:guid}/status` | Roles: Vendor | visible | none | orderId: Guid | body: request: VendorOrderStatusUpdateRequest | application/json | none | none |  |
+| GET | `/api/v1/vendor/orders/export` | Roles: Vendor | visible | status: OrderStatus? = null, search: string? = null, fromDate: DateTime? = null, toDate: DateTime? = null, assignedOnly: bool = false, type: string? = null | none | none | application/json | none | none |  |
+| POST | `/api/v1/vendor/orders/import` | Roles: Vendor | visible | none | none | form: file: IFormFile | multipart/form-data | none | 10_485_760 |  |
+
+## 4. Schemas
+
+### 4.1 DTO Classes
+
+`CreateAIProjectDto`
+Source: `src/TBM.Application/DTOs/AI/CreateAIProjectDto.cs`
+- `sourceImageUrl: string`
+- `outputType: AIOutputType?`
+- `generationType: AIGenerationType?`
+- `prompt: string`
+- `contextLabel: string?`
+
+`OrderStatusHistoryDto`
+Source: `src/TBM.Application/DTOs/Admin/OrderStatusHistoryDto.cs`
+- `oldStatus: string`
+- `newStatus: string`
+- `changedAt: DateTime`
+- `note: string?`
+
+`TBM.Application.Common.PagedResult`
+Source: `src/TBM.Application/DTOs/Common/PagedResult.cs`
+- `items: List<T>`
+- `totalCount: int`
+- `page: int`
+- `pageSize: int`
+
+`TBM.Application.DTOs.Admin.AdminAnalyticsOverviewDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminAnalyticsOverviewDto.cs`
+- `totalRevenue: decimal`
+- `revenueGrowthPercentage: decimal`
+- `totalOrders: int`
+- `ordersGrowthPercentage: decimal`
+- `totalUsers: int`
+- `usersGrowthPercentage: decimal`
+- `averageOrderValue: decimal`
+
+`TBM.Application.DTOs.Admin.AdminCreateUserRequestDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminUserManagementDtos.cs`
+- `fullName: string`
+- `email: string`
+- `role: string`
+- `isActive: bool`
+- `password: string`
+
+`TBM.Application.DTOs.Admin.AdminDashboardAlertDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminDashboardDtos.cs`
+- `id: string`
+- `severity: string`
+- `message: string`
+- `createdAt: DateTime`
+
+`TBM.Application.DTOs.Admin.AdminDashboardRevenueDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminDashboardDtos.cs`
+- `timeRange: string`
+- `totalRevenue: decimal`
+- `monthlyRecurring: decimal`
+- `chartData: List<AdminRevenueChartPointDto>`
+
+`TBM.Application.DTOs.Admin.AdminDashboardServerLoadDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminDashboardDtos.cs`
+- `cluster: string`
+- `capacity: string`
+- `status: string`
+- `cpuUsage: decimal`
+- `memoryUsage: decimal`
+- `diskUsage: decimal`
+
+`TBM.Application.DTOs.Admin.AdminDashboardStatsDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminDashboardDtos.cs`
+- `platformUptime: string`
+- `activeUsers: int`
+- `avgApiLatency: decimal`
+
+`TBM.Application.DTOs.Admin.AdminFinancialMonthlyRevenueDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminFinancialDtos.cs`
+- `data: List<TBM.Core.DTOs.Admin.MonthlyRevenueDto>`
+
+`TBM.Application.DTOs.Admin.AdminFinancialStatsDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminFinancialDtos.cs`
+- `totalRevenue: decimal`
+- `revenueThisMonth: decimal`
+- `totalTransactions: int`
+- `successfulTransactions: int`
+- `refundedTransactions: int`
+- `refundedAmount: decimal`
+
+`TBM.Application.DTOs.Admin.AdminFinancialTransactionDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminFinancialDtos.cs`
+- `id: Guid`
+- `orderNumber: string`
+- `userId: Guid`
+- `customerName: string`
+- `customerEmail: string`
+- `amount: decimal`
+- `paymentStatus: string`
+- `paymentMethod: string?`
+- `paymentReference: string?`
+- `orderStatus: string`
+- `createdAt: DateTime`
+- `paidAt: DateTime?`
+
+`TBM.Application.DTOs.Admin.AdminFinancialTransactionListDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminFinancialDtos.cs`
+- `transactions: List<AdminFinancialTransactionDto>`
+- `pagination: AdminPaginationDto`
+
+`TBM.Application.DTOs.Admin.AdminOrderDetailsDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminOrderDetailsDto.cs`
+- `id: Guid`
+- `orderNumber: string`
+- `status: string`
+- `total: decimal`
+- `items: List<OrderItemDto>`
+- `history: List<OrderStatusHistoryDto>`
+
+`TBM.Application.DTOs.Admin.AdminOrderListDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminOrderListDto.cs`
+- `id: Guid`
+- `orderNumber: string`
+- `customerName: string`
+- `total: decimal`
+- `status: string`
+- `createdAt: DateTime`
+
+`TBM.Application.DTOs.Admin.AdminPaginationDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminSystemLogDtos.cs`
+- `page: int`
+- `limit: int`
+- `total: int`
+- `totalPages: int`
+
+`TBM.Application.DTOs.Admin.AdminQuickActionDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminDashboardDtos.cs`
+- `id: string`
+- `label: string`
+- `route: string`
+- `method: string`
+
+`TBM.Application.DTOs.Admin.AdminRevenueChartPointDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminDashboardDtos.cs`
+- `year: int`
+- `month: int`
+- `revenue: decimal`
+
+`TBM.Application.DTOs.Admin.AdminSystemLogDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminSystemLogDtos.cs`
+- `id: Guid`
+- `action: string`
+- `category: string`
+- `severity: string`
+- `userId: string`
+- `ipAddress: string?`
+- `oldValue: string?`
+- `newValue: string?`
+- `createdAt: DateTime`
+
+`TBM.Application.DTOs.Admin.AdminSystemLogListDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminSystemLogDtos.cs`
+- `logs: List<AdminSystemLogDto>`
+- `pagination: AdminPaginationDto`
+
+`TBM.Application.DTOs.Admin.AdminSystemLogStatsDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminSystemLogDtos.cs`
+- `totalLogs: int`
+- `errorCount: int`
+- `warningCount: int`
+- `infoCount: int`
+- `lastLogAt: DateTime?`
+
+`TBM.Application.DTOs.Admin.AdminUpdateUserRoleRequestDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminUserManagementDtos.cs`
+- `newRole: string`
+
+`TBM.Application.DTOs.Admin.AdminUpdateUserStatusRequestDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminUserManagementDtos.cs`
+- `isActive: bool`
+
+`TBM.Application.DTOs.Admin.AdminUserDetailsDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminUserDetailsDto.cs`
+- `id: Guid`
+- `email: string`
+- `firstName: string`
+- `lastName: string`
+- `status: string`
+- `roles: List<string>`
+- `createdAt: DateTime`
+
+`TBM.Application.DTOs.Admin.AdminUserListDto`
+Source: `src/TBM.Application/DTOs/Admin/AdminUserListDto.cs`
+- `id: Guid`
+- `email: string`
+- `fullName: string`
+- `status: string`
+- `roles: List<string>`
+- `createdAt: DateTime`
+
+`TBM.Application.DTOs.Admin.MonthlyRevenueDto`
+Source: `src/TBM.Application/DTOs/Admin/MonthlyRevenueDto.cs`
+- `year: int`
+- `month: int`
+- `revenue: decimal`
+
+`TBM.Application.DTOs.Admin.PaymentDistributionDto`
+Source: `src/TBM.Application/DTOs/Admin/PaymentDistributionDto.cs`
+- `paymentMethod: string`
+- `revenue: decimal`
+
+`TBM.Application.DTOs.Admin.TrackingDto`
+Source: `src/TBM.Application/DTOs/Admin/TrackingDto.cs`
+- `trackingNumber: string`
+
+`TBM.Application.DTOs.AI.AICreditAdjustmentRequestDto`
+Source: `src/TBM.Application/DTOs/AI/AICreditDtos.cs`
+- `userId: Guid`
+- `amount: int`
+- `reason: string`
+
+`TBM.Application.DTOs.AI.AICreditAdjustmentResultDto`
+Source: `src/TBM.Application/DTOs/AI/AICreditDtos.cs`
+- `userId: Guid`
+- `previousBalance: int`
+- `newBalance: int`
+- `delta: int`
+- `reason: string`
+- `actionType: string`
+- `reference: string?`
+- `timestampUtc: DateTime`
+
+`TBM.Application.DTOs.AI.AICreditBalanceDto`
+Source: `src/TBM.Application/DTOs/AI/AICreditDtos.cs`
+- `userId: Guid`
+- `balance: int`
+- `updatedAtUtc: DateTime`
+
+`TBM.Application.DTOs.AI.AIProjectListItemDto`
+Source: `src/TBM.Application/DTOs/AI/AIProjectListItemDto.cs`
+- `id: Guid`
+- `status: AIProjectStatus`
+- `generationType: AIGenerationType`
+- `contextLabel: string?`
+- `createdAt: DateTime`
+- `latestDesignUrl: string?`
+- `designCount: int`
+
+`TBM.Application.DTOs.AI.AIUsageMonthlySpendResponseDto`
+Source: `src/TBM.Application/DTOs/AI/AIUsageDtos.cs`
+- `year: int`
+- `month: int`
+- `totalGenerations: int`
+- `totalCreditsUsed: int`
+- `totalEstimatedCost: decimal`
+- `distinctUsers: int`
+
+`TBM.Application.DTOs.AI.AIUsageSummaryResponseDto`
+Source: `src/TBM.Application/DTOs/AI/AIUsageDtos.cs`
+- `fromUtc: DateTime`
+- `toUtc: DateTime`
+- `totalGenerations: int`
+- `totalCreditsUsed: int`
+- `totalEstimatedCost: decimal`
+
+`TBM.Application.DTOs.AI.ApproveAssistantToolActionRequestDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `approve: bool`
+- `reason: string?`
+
+`TBM.Application.DTOs.AI.AssistantChatMessageDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `messageId: Guid`
+- `role: string`
+- `content: string`
+- `createdAtUtc: DateTime`
+- `intent: string?`
+- `links: List<AssistantLinkDto>`
+
+`TBM.Application.DTOs.AI.AssistantLinkDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `label: string`
+- `url: string`
+- `method: string`
+- `description: string?`
+
+`TBM.Application.DTOs.AI.AssistantLlmMessageDto`
+Source: `src/TBM.Application/DTOs/AI/AssistantLlmDtos.cs`
+- `role: string`
+- `content: string`
+
+`TBM.Application.DTOs.AI.AssistantLlmRequestDto`
+Source: `src/TBM.Application/DTOs/AI/AssistantLlmDtos.cs`
+- `systemPrompt: string`
+- `messages: List<AssistantLlmMessageDto>`
+
+`TBM.Application.DTOs.AI.AssistantLlmResponseDto`
+Source: `src/TBM.Application/DTOs/AI/AssistantLlmDtos.cs`
+- `intent: string`
+- `reply: string`
+- `links: List<AssistantLinkDto>`
+- `tasks: List<AssistantLlmTaskPlanDto>`
+- `toolActions: List<AssistantLlmToolActionPlanDto>`
+
+`TBM.Application.DTOs.AI.AssistantLlmTaskPlanDto`
+Source: `src/TBM.Application/DTOs/AI/AssistantLlmDtos.cs`
+- `title: string`
+- `description: string`
+- `actionUrl: string?`
+- `actionMethod: string`
+- `requiresApproval: bool`
+
+`TBM.Application.DTOs.AI.AssistantLlmToolActionPlanDto`
+Source: `src/TBM.Application/DTOs/AI/AssistantLlmDtos.cs`
+- `name: string`
+- `description: string`
+- `actionUrl: string`
+- `actionMethod: string`
+- `requiresApproval: bool`
+- `payloadJson: string?`
+
+`TBM.Application.DTOs.AI.AssistantMessageRequestDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `sessionId: Guid?`
+- `message: string`
+- `enableToolPlanning: bool`
+
+`TBM.Application.DTOs.AI.AssistantMessageResponseDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `sessionId: Guid`
+- `userMessageId: Guid`
+- `assistantMessageId: Guid`
+- `createdAtUtc: DateTime`
+- `intent: string`
+- `assistantReply: string`
+- `links: List<AssistantLinkDto>`
+- `suggestedTasks: List<AssistantTaskDto>`
+- `toolActions: List<AssistantToolActionDto>`
+
+`TBM.Application.DTOs.AI.AssistantSessionDetailsDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `sessionId: Guid`
+- `title: string`
+- `createdAtUtc: DateTime`
+- `lastUpdatedAtUtc: DateTime`
+- `messages: List<AssistantChatMessageDto>`
+- `tasks: List<AssistantTaskDto>`
+- `toolActions: List<AssistantToolActionDto>`
+
+`TBM.Application.DTOs.AI.AssistantSessionSummaryDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `sessionId: Guid`
+- `title: string`
+- `createdAtUtc: DateTime`
+- `lastUpdatedAtUtc: DateTime`
+- `messageCount: int`
+- `pendingTaskCount: int`
+
+`TBM.Application.DTOs.AI.AssistantTaskDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `taskId: Guid`
+- `title: string`
+- `description: string`
+- `status: string`
+- `actionUrl: string?`
+- `actionMethod: string`
+- `requiresApproval: bool`
+- `toolActionId: Guid?`
+- `createdAtUtc: DateTime`
+- `updatedAtUtc: DateTime?`
+
+`TBM.Application.DTOs.AI.AssistantToolActionDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `actionId: Guid`
+- `name: string`
+- `description: string`
+- `actionUrl: string`
+- `actionMethod: string`
+- `requiresApproval: bool`
+- `status: string`
+- `createdAtUtc: DateTime`
+- `latestApproval: AssistantToolApprovalDto?`
+- `latestExecution: AssistantToolExecutionDto?`
+
+`TBM.Application.DTOs.AI.AssistantToolApprovalDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `approvalId: Guid`
+- `actionId: Guid`
+- `status: string`
+- `reason: string?`
+- `createdAtUtc: DateTime`
+- `reviewedAtUtc: DateTime?`
+
+`TBM.Application.DTOs.AI.AssistantToolExecutionDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `executionId: Guid`
+- `actionId: Guid`
+- `status: string`
+- `resultJson: string?`
+- `errorMessage: string?`
+- `executedAtUtc: DateTime`
+
+`TBM.Application.DTOs.AI.CreateRenovationEstimateRequestDto`
+Source: `src/TBM.Application/DTOs/AI/RenovationEstimatorDtos.cs`
+- `projectName: string`
+- `roomType: string`
+- `lengthMeters: decimal`
+- `widthMeters: decimal`
+- `heightMeters: decimal`
+- `finishLevel: string`
+- `includeFlooring: bool`
+- `includePainting: bool`
+- `includeElectrical: bool`
+- `includePlumbing: bool`
+- `contingencyPercent: decimal`
+
+`TBM.Application.DTOs.AI.ExecuteAssistantToolActionRequestDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `dryRun: bool`
+
+`TBM.Application.DTOs.AI.GeneratedMediaPersistenceResultDto`
+Source: `src/TBM.Application/DTOs/AI/GeneratedMediaPersistenceResultDto.cs`
+- `cloudinaryUrl: string`
+- `temporaryProviderUrl: string`
+- `fileName: string`
+- `contentType: string?`
+
+`TBM.Application.DTOs.AI.GenerateImageDto`
+Source: `src/TBM.Application/DTOs/AI/GenerateImageDto.cs`
+- `projectId: Guid`
+- `prompt: string?`
+- `sourceImageUrl: string?`
+
+`TBM.Application.DTOs.AI.GenerateVideoDto`
+Source: `src/TBM.Application/DTOs/AI/GenerateVideoDto.cs`
+- `projectId: Guid`
+- `prompt: string?`
+- `sourceImageUrl: string?`
+- `durationSeconds: int`
+
+`TBM.Application.DTOs.AI.PublicProjectListItemDto`
+Source: `src/TBM.Application/DTOs/AI/PublicProjectListItemDto.cs`
+- `designId: Guid`
+- `projectId: Guid`
+- `outputUrl: string`
+- `outputType: AIOutputType`
+- `roomType: string?`
+- `prompt: string?`
+- `createdAt: DateTime`
+- `publishedAt: DateTime?`
+
+`TBM.Application.DTOs.AI.RenovationEstimateLineItemDto`
+Source: `src/TBM.Application/DTOs/AI/RenovationEstimatorDtos.cs`
+- `group: string`
+- `name: string`
+- `quantity: decimal`
+- `unit: string`
+- `unitCost: decimal`
+- `totalCost: decimal`
+
+`TBM.Application.DTOs.AI.RenovationEstimateLinkDto`
+Source: `src/TBM.Application/DTOs/AI/RenovationEstimatorDtos.cs`
+- `label: string`
+- `url: string`
+- `method: string`
+
+`TBM.Application.DTOs.AI.RenovationEstimateResponseDto`
+Source: `src/TBM.Application/DTOs/AI/RenovationEstimatorDtos.cs`
+- `estimateId: Guid`
+- `projectName: string`
+- `roomType: string`
+- `createdAtUtc: DateTime`
+- `floorAreaSqm: decimal`
+- `wallAreaSqm: decimal`
+- `currency: string`
+- `finishLevel: string`
+- `materialsSubtotal: decimal`
+- `laborSubtotal: decimal`
+- `contingencyAmount: decimal`
+- `totalEstimate: decimal`
+- `summary: string`
+- `lineItems: List<RenovationEstimateLineItemDto>`
+- `suggestedProducts: List<RenovationEstimateSuggestedProductDto>`
+- `nextSteps: List<RenovationEstimateLinkDto>`
+
+`TBM.Application.DTOs.AI.RenovationEstimateSuggestedProductDto`
+Source: `src/TBM.Application/DTOs/AI/RenovationEstimatorDtos.cs`
+- `productId: Guid`
+- `name: string`
+- `price: decimal?`
+- `category: string?`
+- `link: string`
+
+`TBM.Application.DTOs.AI.RenovationEstimateSummaryDto`
+Source: `src/TBM.Application/DTOs/AI/RenovationEstimatorDtos.cs`
+- `estimateId: Guid`
+- `projectName: string`
+- `roomType: string`
+- `createdAtUtc: DateTime`
+- `totalEstimate: decimal`
+- `currency: string`
+
+`TBM.Application.DTOs.AI.UpdateAssistantTaskStatusRequestDto`
+Source: `src/TBM.Application/DTOs/AI/AIPersonalAssistantDtos.cs`
+- `status: string`
+
+`TBM.Application.DTOs.AI.UpdateDesignVisibilityDto`
+Source: `src/TBM.Application/DTOs/AI/DesignVisibilityDto.cs`
+- `isPublic: bool`
+
+`TBM.Application.DTOs.Auth.AdminLoginDto`
+Source: `src/TBM.Application/DTOs/Auth/AdminLoginDto.cs`
+- `email: string`
+- `password: string`
+- `rememberMe: bool`
+
+`TBM.Application.DTOs.Auth.ForgotPasswordDto`
+Source: `src/TBM.Application/DTOs/Auth/ForgotPasswordDto.cs`
+- `email: string`
+
+`TBM.Application.DTOs.Auth.LoginDto`
+Source: `src/TBM.Application/DTOs/Auth/LoginDto.cs`
+- `email: string`
+- `password: string`
+- `guestCartItems: List<MergeCartItemDto>`
+- `items: List<MergeCartItemDto>`
+- `cartItems: List<MergeCartItemDto>`
+
+`TBM.Application.DTOs.Auth.RefreshTokenDto`
+Source: `src/TBM.Application/DTOs/Auth/RefreshTokenDto.cs`
+- `refreshToken: string`
+
+`TBM.Application.DTOs.Auth.RegisterDto`
+Source: `src/TBM.Application/DTOs/Auth/RegisterDto.cs`
+- `email: string`
+- `password: string`
+- `confirmPassword: string`
+- `firstName: string`
+- `lastName: string`
+- `phoneNumber: string?`
+
+`TBM.Application.DTOs.Auth.ResetPasswordDto`
+Source: `src/TBM.Application/DTOs/Auth/ResetPasswordDto.cs`
+- `token: string`
+- `newPassword: string`
+- `confirmPassword: string`
+
+`TBM.Application.DTOs.Auth.TokenResponseDto`
+Source: `src/TBM.Application/DTOs/Auth/TokenResponseDto.cs`
+- `accessToken: string`
+- `refreshToken: string`
+- `expiresAt: DateTime`
+- `user: UserInfoDto`
+- `cart: CartDto?`
+- `cartMergeAttempted: bool`
+- `cartMergeSucceeded: bool`
+- `cartMergeMessage: string?`
+- `cartMergeWarnings: List<MergeCartWarningDto>`
+
+`TBM.Application.DTOs.Auth.UserInfoDto`
+Source: `src/TBM.Application/DTOs/Auth/TokenResponseDto.cs`
+- `id: Guid`
+- `email: string`
+- `firstName: string`
+- `lastName: string`
+- `fullName: string`
+- `roles: List<string>`
+
+`TBM.Application.DTOs.Auth.VerifyEmailCodeDto`
+Source: `src/TBM.Application/DTOs/Auth/VerifyEmailCodeDto.cs`
+- `email: string?`
+- `code: string?`
+
+`TBM.Application.DTOs.Checkout.CheckoutAddressDto`
+Source: `src/TBM.Application/DTOs/Checkout/CheckoutDtos.cs`
+- `id: Guid`
+- `fullName: string`
+- `street: string`
+- `city: string`
+- `state: string`
+- `postalCode: string`
+- `country: string`
+- `phone: string?`
+- `deliveryNotes: string?`
+- `isDefault: bool`
+
+`TBM.Application.DTOs.Checkout.CheckoutDeliveryDto`
+Source: `src/TBM.Application/DTOs/Checkout/CheckoutDtos.cs`
+- `fullName: string?`
+- `phone: string?`
+- `address: string?`
+- `city: string?`
+- `state: string?`
+- `notes: string?`
+- `customerNotes: string?`
+
+`TBM.Application.DTOs.Checkout.CheckoutItemDto`
+Source: `src/TBM.Application/DTOs/Checkout/CheckoutDtos.cs`
+- `productId: Guid`
+- `name: string`
+- `unitPrice: decimal`
+- `quantity: int`
+- `subtotal: decimal`
+- `image: string?`
+
+`TBM.Application.DTOs.Checkout.CheckoutPaymentDetailsDto`
+Source: `src/TBM.Application/DTOs/Checkout/CheckoutDtos.cs`
+- `method: string?`
+- `reference: string?`
+- `callbackUrl: string?`
+
+`TBM.Application.DTOs.Checkout.CheckoutPaymentRequestDto`
+Source: `src/TBM.Application/DTOs/Checkout/CheckoutDtos.cs`
+- `delivery: CheckoutDeliveryDto`
+- `payment: CheckoutPaymentDetailsDto`
+- `total: decimal`
+- `promoCode: string?`
+- `idempotencyKey: string?`
+
+`TBM.Application.DTOs.Checkout.CheckoutPaymentResultDto`
+Source: `src/TBM.Application/DTOs/Checkout/CheckoutDtos.cs`
+- `success: bool`
+- `orderId: Guid`
+- `orderNumber: string`
+- `message: string`
+- `isIdempotent: bool`
+- `paymentProvider: string?`
+- `paymentReference: string?`
+- `paymentStatus: string?`
+- `authorizationUrl: string?`
+- `accessCode: string?`
+- `publicKey: string?`
+
+`TBM.Application.DTOs.Checkout.CheckoutSummaryDto`
+Source: `src/TBM.Application/DTOs/Checkout/CheckoutDtos.cs`
+- `items: List<CheckoutItemDto>`
+- `subtotal: decimal`
+- `shipping: decimal`
+- `tax: decimal`
+- `discount: decimal`
+- `total: decimal`
+- `savedAddresses: List<CheckoutAddressDto>`
+- `defaultAddress: CheckoutAddressDto?`
+- `promo: PromoValidationResultDto?`
+
+`TBM.Application.DTOs.Checkout.PromoValidationRequestDto`
+Source: `src/TBM.Application/DTOs/Checkout/CheckoutDtos.cs`
+- `code: string`
+
+`TBM.Application.DTOs.Checkout.PromoValidationResultDto`
+Source: `src/TBM.Application/DTOs/Checkout/CheckoutDtos.cs`
+- `success: bool`
+- `code: string?`
+- `discount: decimal`
+- `type: string`
+- `discountAmount: decimal`
+- `message: string?`
+
+`TBM.Application.DTOs.Common.ApiResponse`
+Source: `src/TBM.Application/DTOs/Common/ApiResponse.cs`
+- `success: bool`
+- `message: string`
+- `data: T?`
+- `errors: List<string>?`
+
+`TBM.Application.DTOs.Common.OrderStatusValidator`
+Source: `src/TBM.Application/DTOs/Common/OrderStatusValidator.cs`
+- (no public auto-properties detected)
+
+`TBM.Application.DTOs.Contact.ContactSubmissionResultDto`
+Source: `src/TBM.Application/DTOs/Contact/ContactDtos.cs`
+- `accepted: bool`
+- `referenceId: Guid`
+
+`TBM.Application.DTOs.Contact.CreateContactMessageDto`
+Source: `src/TBM.Application/DTOs/Contact/ContactDtos.cs`
+- `fullName: string`
+- `email: string`
+- `phoneNumber: string?`
+- `subject: string?`
+- `message: string`
+
+`TBM.Application.DTOs.Orders.AddToCartDto`
+Source: `src/TBM.Application/DTOs/Orders/AddToCartDto.cs`
+- `productId: Guid`
+- `quantity: int`
+
+`TBM.Application.DTOs.Orders.CancelOrderDto`
+Source: `src/TBM.Application/DTOs/Orders/CancelOrderDto.cs`
+- `reason: string`
+
+`TBM.Application.DTOs.Orders.CartDto`
+Source: `src/TBM.Application/DTOs/Orders/CartDto.cs`
+- `id: Guid`
+- `userId: Guid`
+- `items: List<CartItemDto>`
+- `totalItems: int`
+- `subTotal: decimal`
+- `createdAt: DateTime`
+- `updatedAt: DateTime`
+
+`TBM.Application.DTOs.Orders.CartItemDto`
+Source: `src/TBM.Application/DTOs/Orders/CartItemDto.cs`
+- `id: Guid`
+- `productId: Guid`
+- `productName: string`
+- `productSKU: string?`
+- `productImageUrl: string?`
+- `quantity: int`
+- `unitPrice: decimal`
+- `subTotal: decimal`
+- `inStock: bool`
+- `stockQuantity: int?`
+- `addedAt: DateTime`
+
+`TBM.Application.DTOs.Orders.CreateOrderDto`
+Source: `src/TBM.Application/DTOs/Orders/CreateOrderDto.cs`
+- `shippingFullName: string`
+- `shippingPhone: string`
+- `shippingAddress: string`
+- `shippingCity: string`
+- `shippingState: string`
+- `shippingNotes: string?`
+- `customerNotes: string?`
+- `promoCode: string?`
+- `shippingCost: decimal?`
+- `tax: decimal?`
+- `discount: decimal?`
+
+`TBM.Application.DTOs.Orders.MergeCartItemDto`
+Source: `src/TBM.Application/DTOs/Orders/CartMergeDtos.cs`
+- `productId: Guid`
+- `quantity: int`
+
+`TBM.Application.DTOs.Orders.MergeCartRequestDto`
+Source: `src/TBM.Application/DTOs/Orders/CartMergeDtos.cs`
+- `items: List<MergeCartItemDto>`
+- `guestCartItems: List<MergeCartItemDto>`
+- `cartItems: List<MergeCartItemDto>`
+
+`TBM.Application.DTOs.Orders.MergeCartResultDto`
+Source: `src/TBM.Application/DTOs/Orders/CartMergeDtos.cs`
+- `cart: CartDto`
+- `warnings: List<MergeCartWarningDto>`
+
+`TBM.Application.DTOs.Orders.MergeCartWarningDto`
+Source: `src/TBM.Application/DTOs/Orders/CartMergeDtos.cs`
+- `productId: Guid?`
+- `code: string`
+- `message: string`
+- `requestedQuantity: int?`
+- `appliedQuantity: int?`
+
+`TBM.Application.DTOs.Orders.OrderDto`
+Source: `src/TBM.Application/DTOs/Orders/OrderDto.cs`
+- `id: Guid`
+- `orderNumber: string`
+- `userId: Guid`
+- `userEmail: string`
+- `userFullName: string`
+- `status: int`
+- `statusName: string`
+- `paymentStatus: int`
+- `paymentStatusName: string`
+- `paymentMethod: int?`
+- `paymentMethodName: string?`
+- `subTotal: decimal`
+- `shippingCost: decimal`
+- `tax: decimal`
+- `discount: decimal`
+- `total: decimal`
+- `shippingFullName: string`
+- `shippingPhone: string`
+- `shippingAddress: string`
+- `shippingCity: string`
+- `shippingState: string`
+- `shippingNotes: string?`
+- `paymentReference: string?`
+- `paidAt: DateTime?`
+- `trackingNumber: string?`
+- `shippedAt: DateTime?`
+- `deliveredAt: DateTime?`
+- `cancelledAt: DateTime?`
+- `cancellationReason: string?`
+- `customerNotes: string?`
+- `adminNotes: string?`
+- `items: List<OrderItemDto>`
+- `createdAt: DateTime`
+- `updatedAt: DateTime`
+
+`TBM.Application.DTOs.Orders.OrderFilterDto`
+Source: `src/TBM.Application/DTOs/Orders/OrderFilterDto.cs`
+- `pageNumber: int`
+- `pageSize: int`
+- `userId: Guid?`
+- `status: int?`
+- `paymentStatus: int?`
+- `fromDate: DateTime?`
+- `toDate: DateTime?`
+- `searchTerm: string?`
+
+`TBM.Application.DTOs.Orders.OrderItemDto`
+Source: `src/TBM.Application/DTOs/Orders/OrderItemDto.cs`
+- `id: Guid`
+- `productId: Guid`
+- `productName: string`
+- `productSKU: string?`
+- `productImageUrl: string?`
+- `quantity: int`
+- `unitPrice: decimal`
+- `subTotal: decimal`
+
+`TBM.Application.DTOs.Orders.UpdateCartItemDto`
+Source: `src/TBM.Application/DTOs/Orders/UpdateCartItemDto.cs`
+- `quantity: int`
+
+`TBM.Application.DTOs.Orders.UpdateOrderStatusDto`
+Source: `src/TBM.Application/DTOs/Orders/UpdateOrderStatusDto.cs`
+- `status: int`
+- `adminNotes: string?`
+- `trackingNumber: string?`
+
+`TBM.Application.DTOs.Orders.UpdatePaymentStatusDto`
+Source: `src/TBM.Application/DTOs/Orders/UpdatePaymentStatusDto.cs`
+- `paymentStatus: int`
+- `paymentMethod: int?`
+- `paymentReference: string?`
+
+`TBM.Application.DTOs.Products.AddProductImageDto`
+Source: `src/TBM.Application/DTOs/Products/AddProductImageDto.cs`
+- `imageUrl: string`
+- `altText: string?`
+- `displayOrder: int`
+- `isPrimary: bool`
+
+`TBM.Application.DTOs.Products.CategoryDto`
+Source: `src/TBM.Application/DTOs/Products/CategoryDto.cs`
+- `id: Guid`
+- `name: string`
+- `description: string`
+- `slug: string`
+- `brandType: int`
+- `brandName: string`
+- `parentCategoryId: Guid?`
+- `parentCategoryName: string?`
+- `imageUrl: string?`
+- `displayOrder: int`
+- `isActive: bool`
+- `subCategories: List<CategoryDto>`
+- `productCount: int`
+
+`TBM.Application.DTOs.Products.CreateCategoryDto`
+Source: `src/TBM.Application/DTOs/Products/CreateCategoryDto.cs`
+- `name: string`
+- `description: string`
+- `brandType: int`
+- `parentCategoryId: Guid?`
+- `imageUrl: string?`
+- `displayOrder: int`
+
+`TBM.Application.DTOs.Products.CreateProductDto`
+Source: `src/TBM.Application/DTOs/Products/CreateProductDto.cs`
+- `name: string`
+- `description: string`
+- `shortDescription: string`
+- `skU: string?`
+- `brandType: int`
+- `productType: int`
+- `categoryId: Guid`
+- `price: decimal?`
+- `compareAtPrice: decimal?`
+- `showPrice: bool`
+- `stockQuantity: int?`
+- `lowStockThreshold: int?`
+- `trackInventory: bool`
+- `isFeatured: bool`
+- `displayOrder: int`
+- `metaTitle: string?`
+- `metaDescription: string?`
+- `tags: string?`
+
+`TBM.Application.DTOs.Products.PagedResultDto`
+Source: `src/TBM.Application/DTOs/Products/PagedResultDto.cs`
+- `items: List<T>`
+- `totalCount: int`
+- `pageNumber: int`
+- `pageSize: int`
+
+`TBM.Application.DTOs.Products.ProductCardDto`
+Source: `src/TBM.Application/DTOs/Products/ProductDto.cs`
+- `id: Guid`
+- `name: string`
+- `slug: string`
+- `price: decimal?`
+- `image: string?`
+- `category: string`
+- `inStock: bool`
+
+`TBM.Application.DTOs.Products.ProductDto`
+Source: `src/TBM.Application/DTOs/Products/ProductDto.cs`
+- `id: Guid`
+- `name: string`
+- `description: string`
+- `shortDescription: string`
+- `slug: string`
+- `skU: string?`
+- `brandType: int`
+- `brandName: string`
+- `productType: int`
+- `productTypeName: string`
+- `categoryId: Guid`
+- `categoryName: string`
+- `price: decimal?`
+- `compareAtPrice: decimal?`
+- `showPrice: bool`
+- `priceDisplay: string`
+- `stockQuantity: int?`
+- `inStock: bool`
+- `trackInventory: bool`
+- `isActive: bool`
+- `isFeatured: bool`
+- `tags: string?`
+- `images: List<ProductImageDto>`
+- `primaryImageUrl: string?`
+- `similarProducts: List<ProductCardDto>`
+- `createdAt: DateTime`
+- `updatedAt: DateTime`
+
+`TBM.Application.DTOs.Products.ProductFilterDto`
+Source: `src/TBM.Application/DTOs/Products/ProductFilterDto.cs`
+- `pageNumber: int`
+- `pageSize: int`
+- `brandType: int?`
+- `productType: int?`
+- `categoryId: Guid?`
+- `searchTerm: string?`
+- `minPrice: decimal?`
+- `maxPrice: decimal?`
+- `isFeatured: bool?`
+- `activeOnly: bool`
+
+`TBM.Application.DTOs.Products.ProductImageDto`
+Source: `src/TBM.Application/DTOs/Products/ProductImageDto.cs`
+- `id: Guid`
+- `productId: Guid`
+- `imageUrl: string`
+- `altText: string?`
+- `displayOrder: int`
+- `isPrimary: bool`
+
+`TBM.Application.DTOs.Products.UpdateCategoryDto`
+Source: `src/TBM.Application/DTOs/Products/UpdateCategoryDto.cs`
+- `name: string`
+- `description: string`
+- `parentCategoryId: Guid?`
+- `imageUrl: string?`
+- `displayOrder: int`
+- `isActive: bool`
+
+`TBM.Application.DTOs.Products.UpdateProductDto`
+Source: `src/TBM.Application/DTOs/Products/UpdateProductDto.cs`
+- `name: string`
+- `description: string`
+- `shortDescription: string`
+- `skU: string?`
+- `categoryId: Guid`
+- `price: decimal?`
+- `compareAtPrice: decimal?`
+- `showPrice: bool`
+- `stockQuantity: int?`
+- `lowStockThreshold: int?`
+- `trackInventory: bool`
+- `isActive: bool`
+- `isFeatured: bool`
+- `displayOrder: int`
+- `metaTitle: string?`
+- `metaDescription: string?`
+- `tags: string?`
+
+`TBM.Application.DTOs.Settings.AdminNotificationSettingsDto`
+Source: `src/TBM.Application/DTOs/Admin/settings/AdminNotificationSettingsDto.cs`
+- `emailEnabled: bool`
+- `smsEnabled: bool`
+- `pushEnabled: bool`
+- `webhookEnabled: bool`
+- `lowStockAlerts: bool`
+- `highValueOrderAlerts: bool`
+- `paymentFailureAlerts: bool`
+
+`TBM.Application.DTOs.Settings.AIModelDto`
+Source: `src/TBM.Application/DTOs/Admin/settings/AISettingsDto.cs`
+- `id: string`
+- `enabled: bool`
+- `apiKey: string`
+- `maxTokens: int`
+
+`TBM.Application.DTOs.Settings.AISettingsDto`
+Source: `src/TBM.Application/DTOs/Admin/settings/AISettingsDto.cs`
+- `rateLimit: int`
+- `timeoutSeconds: int`
+- `models: List<AIModelDto>`
+
+`TBM.Application.DTOs.Settings.GeneralSettingsDto`
+Source: `src/TBM.Application/DTOs/Admin/settings/GeneralSettingsDto.cs`
+- `platformName: string`
+- `supportEmail: string`
+- `maintenanceMode: bool`
+- `apiRateLimit: int`
+
+`TBM.Application.DTOs.Settings.PaymentGatewayDto`
+Source: `src/TBM.Application/DTOs/Admin/settings/PaymentSettingsDto.cs`
+- `id: string`
+- `enabled: bool`
+- `publicKey: string`
+- `secretKey: string`
+
+`TBM.Application.DTOs.Settings.PaymentSettingsDto`
+Source: `src/TBM.Application/DTOs/Admin/settings/PaymentSettingsDto.cs`
+- `basePlatformFee: decimal`
+- `fixedFeePerTransaction: decimal`
+- `defaultCurrency: string`
+- `gateways: List<PaymentGatewayDto>`
+
+`TBM.Application.DTOs.Settings.ToggleEnabledDto`
+Source: `src/TBM.Application/DTOs/Admin/settings/AdminNotificationSettingsDto.cs`
+- `enabled: bool`
+
+`TBM.Application.DTOs.Vendor.ActivateVendorRequest`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `displayName: string?`
+- `slaHours: int?`
+- `tenantId: string?`
+
+`TBM.Application.DTOs.Vendor.AssignProductOwnerRequest`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `vendorUserId: Guid`
+
+`TBM.Application.DTOs.Vendor.VendorActivityDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `id: string`
+- `customer: string`
+- `activityType: string`
+- `createdAtUtc: DateTime`
+- `status: string`
+
+`TBM.Application.DTOs.Vendor.VendorAlertDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `type: string`
+- `severity: string`
+- `message: string`
+- `productId: Guid?`
+- `orderId: Guid?`
+- `createdAtUtc: DateTime`
+
+`TBM.Application.DTOs.Vendor.VendorDashboardDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `ownedProducts: int`
+- `lowStockProducts: int`
+- `assignedOrders: int`
+- `pendingOrders: int`
+- `inProgressOrders: int`
+- `unreadNotifications: int`
+- `unreadMessages: int`
+
+`TBM.Application.DTOs.Vendor.VendorDeliveryAssignmentDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `orderId: Guid`
+- `orderNumber: string`
+- `status: OrderStatus`
+- `trackingNumber: string?`
+- `deliveryAgentName: string?`
+- `deliveryAgentPhone: string?`
+- `assignmentNote: string?`
+- `updatedAtUtc: DateTime`
+
+`TBM.Application.DTOs.Vendor.VendorInventoryCreateRequest`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `name: string`
+- `description: string?`
+- `shortDescription: string?`
+- `categoryId: Guid`
+- `skU: string?`
+- `brandType: int?`
+- `productType: int?`
+- `price: decimal?`
+- `stockQuantity: int`
+- `lowStockThreshold: int?`
+- `isActive: bool`
+- `trackInventory: bool?`
+
+`TBM.Application.DTOs.Vendor.VendorInventoryItemDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `productId: Guid`
+- `productName: string`
+- `skU: string?`
+- `stockQuantity: int?`
+- `lowStockThreshold: int?`
+- `isLowStock: bool`
+- `isActive: bool`
+- `price: decimal?`
+
+`TBM.Application.DTOs.Vendor.VendorInventoryStatsDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `totalProducts: int`
+- `activeProducts: int`
+- `lowStockProducts: int`
+- `outOfStockProducts: int`
+- `totalStockUnits: int`
+
+`TBM.Application.DTOs.Vendor.VendorInventoryUpdateRequest`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `stockQuantity: int`
+- `lowStockThreshold: int?`
+- `isActive: bool?`
+- `price: decimal?`
+
+`TBM.Application.DTOs.Vendor.VendorMessageCreateRequest`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `subject: string`
+- `body: string`
+- `to: string?`
+
+`TBM.Application.DTOs.Vendor.VendorMessageDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `id: string`
+- `vendorId: Guid`
+- `direction: string`
+- `subject: string`
+- `body: string`
+- `from: string?`
+- `to: string?`
+- `isRead: bool`
+- `createdAtUtc: DateTime`
+
+`TBM.Application.DTOs.Vendor.VendorNotificationDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `id: string`
+- `vendorId: Guid`
+- `type: string`
+- `title: string`
+- `body: string`
+- `isRead: bool`
+- `orderId: Guid?`
+- `createdAtUtc: DateTime`
+
+`TBM.Application.DTOs.Vendor.VendorOrderAssignmentRequest`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `deliveryAgentName: string?`
+- `deliveryAgentPhone: string?`
+- `assignmentNote: string?`
+
+`TBM.Application.DTOs.Vendor.VendorOrderDetailDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `id: Guid`
+- `orderNumber: string`
+- `status: OrderStatus`
+- `paymentStatus: PaymentStatus`
+- `total: decimal`
+- `createdAt: DateTime`
+- `customerName: string`
+- `customerEmail: string`
+- `shippingAddress: string`
+- `shippingCity: string`
+- `shippingState: string`
+- `shippingPhone: string`
+- `deliveryAgentName: string?`
+- `deliveryAgentPhone: string?`
+- `items: List<VendorOrderItemDto>`
+- `notes: List<VendorOrderNoteDto>`
+
+`TBM.Application.DTOs.Vendor.VendorOrderExportResultDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `success: bool`
+- `fileName: string`
+- `contentType: string`
+- `sizeBytes: long`
+- `contentBase64: string?`
+
+`TBM.Application.DTOs.Vendor.VendorOrderImportResultDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `success: bool`
+- `imported: int`
+- `failed: int`
+- `errors: List<string>`
+
+`TBM.Application.DTOs.Vendor.VendorOrderItemDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `productId: Guid`
+- `productName: string`
+- `quantity: int`
+- `unitPrice: decimal`
+- `subTotal: decimal`
+
+`TBM.Application.DTOs.Vendor.VendorOrderListItemDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `id: Guid`
+- `orderNumber: string`
+- `customerName: string`
+- `type: string`
+- `status: OrderStatus`
+- `paymentStatus: PaymentStatus`
+- `total: decimal`
+- `createdAt: DateTime`
+- `matchingItems: int`
+- `deliveryAgentName: string?`
+- `deliveryAgentPhone: string?`
+
+`TBM.Application.DTOs.Vendor.VendorOrderNoteDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `id: string`
+- `orderId: Guid`
+- `vendorId: Guid`
+- `note: string`
+- `createdAtUtc: DateTime`
+
+`TBM.Application.DTOs.Vendor.VendorOrderNoteRequest`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `note: string`
+
+`TBM.Application.DTOs.Vendor.VendorOrderStatusUpdateRequest`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `status: OrderStatus`
+- `note: string?`
+
+`TBM.Application.DTOs.Vendor.VendorPagedResultDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `items: List<T>`
+- `total: int`
+- `page: int`
+- `pageSize: int`
+
+`TBM.Application.DTOs.Vendor.VendorProductOwnershipDto`
+Source: `src/TBM.Application/DTOs/Vendor/VendorDtos.cs`
+- `productId: Guid`
+- `vendorUserId: Guid`
+- `tenantId: string`
+- `assignedByUserId: Guid`
+- `assignedAtUtc: DateTime`
+
+`TBM.Core.DTOs.Admin.MonthlyRevenueDto`
+Source: `src/TBM.Core/DTOs/Admin/MonthlyRevenueDto.cs`
+- `year: int`
+- `month: int`
+- `revenue: decimal`
+
+`TBM.Core.DTOs.Admin.PaymentDistributionDto`
+Source: `src/TBM.Core/DTOs/Admin/PaymentDistributionDto.cs`
+- `paymentMethod: string`
+- `revenue: decimal`
+
+`TBM.Core.DTOs.Admin.RevenueByServiceDto`
+Source: `src/TBM.Core/DTOs/Admin/RevenueByServiceDto.cs`
+- `service: string`
+- `revenue: decimal`
+- `orders: int`
+
+### 4.2 Enums and Static Constants
+
+`TBM.Core.Enums.ActivityFilter`
+Source: `src/TBM.Core/Enums/ActivityFilter.cs`
+- `All`
+- `Orders`
+- `Projects`
+
+`TBM.Core.Enums.AIAssistantApprovalStatus`
+Source: `src/TBM.Core/Enums/AIAssistantApprovalStatus.cs`
+- `Pending`
+- `Approved`
+- `Rejected`
+- `Cancelled`
+
+`TBM.Core.Enums.AIAssistantMessageRole`
+Source: `src/TBM.Core/Enums/AIAssistantMessageRole.cs`
+- `User`
+- `Assistant`
+- `System`
+
+`TBM.Core.Enums.AIAssistantTaskStatus`
+Source: `src/TBM.Core/Enums/AIAssistantTaskStatus.cs`
+- `Pending`
+- `InProgress`
+- `AwaitingApproval`
+- `Completed`
+- `Cancelled`
+- `Failed`
+
+`TBM.Core.Enums.AIAssistantToolActionStatus`
+Source: `src/TBM.Core/Enums/AIAssistantToolActionStatus.cs`
+- `PendingApproval`
+- `Ready`
+- `Approved`
+- `Rejected`
+- `Executed`
+- `Failed`
+
+`TBM.Core.Enums.AIAssistantToolExecutionStatus`
+Source: `src/TBM.Core/Enums/AIAssistantToolExecutionStatus.cs`
+- `Succeeded`
+- `Failed`
+- `Blocked`
+
+`TBM.Core.Enums.AIGenerationType`
+Source: `src/TBM.Core/Enums/AIGenerationType.cs`
+- `ImageToImage`
+- `ImageToVideo`
+
+`TBM.Core.Enums.AIOutputType`
+Source: `src/TBM.Core/Enums/AIOutputType.cs`
+- `Image`
+- `Video`
+
+`TBM.Core.Enums.AIProjectStatus`
+Source: `src/TBM.Core/Enums/AIProjectStatus.cs`
+- `Pending`
+- `Processing`
+- `Completed`
+- `Failed`
+
+`TBM.Core.Enums.BrandType`
+Source: `src/TBM.Core/Enums/BrandType.cs`
+- `TBM`
+- `Bogat`
+
+`TBM.Core.Enums.OrderStatus`
+Source: `src/TBM.Core/Enums/OrderStatus.cs`
+- `Pending`
+- `PaymentReceived`
+- `Processing`
+- `Shipped`
+- `Delivered`
+- `Completed`
+- `Cancelled`
+- `Refunded`
+
+`TBM.Core.Enums.PaymentMethod`
+Source: `src/TBM.Core/Enums/PaymentMethod.cs`
+- `Paystack`
+- `Flutterwave`
+- `BankTransfer`
+- `Cash`
+
+`TBM.Core.Enums.PaymentStatus`
+Source: `src/TBM.Core/Enums/PaymentStatus.cs`
+- `Pending`
+- `Paid`
+- `Failed`
+- `Refunded`
+- `PartiallyPaid`
+
+`TBM.Core.Enums.ProductType`
+Source: `src/TBM.Core/Enums/ProductType.cs`
+- `PhysicalProduct`
+- `Service`
+
+`TBM.Core.Enums.UserRoles`
+Source: `src/TBM.Core/Enums/UserRoles.cs`
+- `Customer`
+- `Vendor`
+- `SuperAdmin`
+- `Admin`
+
+`TBM.Core.Enums.UserStatus`
+Source: `src/TBM.Core/Enums/UserStatus.cs`
+- `Active`
+- `Suspended`
+- `Pending`
+
+## 5. Example Payloads
+
+# Phase 0-2 Sample Response Payloads
+
+Generated from current controllers on February 21, 2026.
+
+## 1) Test Setup
+
+- Base URL example: `https://localhost:5001`
+- Protected routes require:
+  - `Authorization: Bearer <jwt_token>`
+- Common auth failure:
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.2",
+  "title": "Unauthorized",
+  "status": 401
+}
+```
+
+## 2) Phase 0 Samples
+
+### POST `/Auth/register` (also works on `/api/Auth/register`, `/api/v1/Auth/register`)
+
+```json
+{
+  "success": true,
+  "message": "Registration successful. Please verify your email.",
+  "data": {
+    "accessToken": "eyJhbGciOi...",
+    "refreshToken": "d5f4ff9f4b034980a3a3...",
+    "expiresAt": "2026-02-21T14:30:00Z",
+    "user": {
+      "id": "2f9d7b7d-1a89-49f1-95ea-1d87dbcb7d90",
+      "email": "user@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "fullName": "John Doe",
+      "roles": [
+        "Customer"
+      ]
+    }
+  },
+  "errors": null
+}
+```
+
+### POST `/Auth/login`
+
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "accessToken": "eyJhbGciOi...",
+    "refreshToken": "a5b9f0af2d6d4a5b8f14...",
+    "expiresAt": "2026-02-21T14:35:00Z",
+    "user": {
+      "id": "2f9d7b7d-1a89-49f1-95ea-1d87dbcb7d90",
+      "email": "user@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "fullName": "John Doe",
+      "roles": [
+        "Customer"
+      ]
+    }
+  },
+  "errors": null
+}
+```
+
+### GET `/Auth/me` (also `/api/auth/me`, `/api/v1/auth/me`)
+
+```json
+{
+  "userId": "2f9d7b7d-1a89-49f1-95ea-1d87dbcb7d90",
+  "email": "user@example.com",
+  "name": "John Doe",
+  "roles": [
+    "Customer"
+  ]
+}
+```
+
+### POST `/Auth/forgot-password`
+
+```json
+{
+  "success": true,
+  "message": "If the email exists, a password reset link has been sent.",
+  "data": true,
+  "errors": null
+}
+```
+
+### POST `/Auth/verify-email` (body flow)
+
+```json
+{
+  "success": true,
+  "message": "Email verified successfully",
+  "data": true,
+  "errors": null
+}
+```
+
+### POST `/Auth/verify-email?token=...` (token flow)
+
+```json
+{
+  "success": true,
+  "message": "Email verified successfully",
+  "data": true,
+  "errors": null
+}
+```
+
+### POST `/Auth/resend-verification`
+
+```json
+{
+  "success": true,
+  "message": "Verification email sent successfully",
+  "data": true,
+  "errors": null
+}
+```
+
+### GET `/auth/google` and GET `/auth/apple` (currently disabled mode)
+
+```json
+{
+  "success": false,
+  "message": "Google OAuth is not configured yet.",
+  "data": null,
+  "errors": [
+    "Use POST /api/v1/auth/login with email/password.",
+    "If OAuth is required, configure provider credentials and callback settings."
+  ]
+}
+```
+
+## 3) Phase 1 Samples
+
+### GET `/api/flooring`
+
+```json
+{
+  "products": [
+    {
+      "id": "3c030f31-0f79-4d6e-8382-bad86d4df5c8",
+      "name": "Premium Oak Tile",
+      "slug": "premium-oak-tile",
+      "price": 24500.0,
+      "primaryImageUrl": "https://cdn.example.com/p/oak.jpg",
+      "inStock": true
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 12,
+    "total": 1,
+    "totalPages": 1,
+    "hasMore": false
+  },
+  "filters": {
+    "category": "tiles",
+    "materialType": "wood",
+    "minPrice": 10000.0,
+    "maxPrice": 50000.0,
+    "sort": "price_asc"
+  }
+}
+```
+
+### GET `/materials`
+
+```json
+{
+  "materials": [
+    {
+      "id": "3c030f31-0f79-4d6e-8382-bad86d4df5c8",
+      "name": "Premium Oak Tile",
+      "slug": "premium-oak-tile",
+      "description": "Engineered oak wood finish",
+      "price": 24500.0,
+      "image": "https://cdn.example.com/p/oak.jpg",
+      "category": "Tiles",
+      "inStock": true
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 12,
+    "total": 1,
+    "totalPages": 1,
+    "hasMore": false
+  },
+  "filters": {
+    "category": null,
+    "materialType": null,
+    "minPrice": null,
+    "maxPrice": null,
+    "sort": null
+  }
+}
+```
+
+### GET `/materials/{id}`
+
+```json
+{
+  "material": {
+    "id": "3c030f31-0f79-4d6e-8382-bad86d4df5c8",
+    "name": "Premium Oak Tile",
+    "slug": "premium-oak-tile",
+    "description": "Engineered oak wood finish",
+    "price": 24500.0,
+    "image": "https://cdn.example.com/p/oak.jpg",
+    "category": "Tiles",
+    "inStock": true
+  }
+}
+```
+
+### GET `/api/cart`
+
+```json
+{
+  "items": [
+    {
+      "id": "717e8725-c639-4172-af8d-5f08c4c4cc76",
+      "productId": "3c030f31-0f79-4d6e-8382-bad86d4df5c8",
+      "productName": "Premium Oak Tile",
+      "productSKU": "TILE-OAK-001",
+      "productImageUrl": "https://cdn.example.com/p/oak.jpg",
+      "quantity": 2,
+      "unitPrice": 24500.0,
+      "subTotal": 49000.0,
+      "inStock": true,
+      "stockQuantity": 35,
+      "addedAt": "2026-02-21T11:00:00Z"
+    }
+  ],
+  "subtotal": 49000.0,
+  "shipping": 5000.0,
+  "taxRate": 0.075,
+  "estimatedDelivery": "2026-02-24"
+}
+```
+
+### POST `/api/cart/add`
+
+```json
+{
+  "success": true,
+  "item": {
+    "id": "717e8725-c639-4172-af8d-5f08c4c4cc76",
+    "productId": "3c030f31-0f79-4d6e-8382-bad86d4df5c8",
+    "productName": "Premium Oak Tile",
+    "quantity": 2,
+    "unitPrice": 24500.0,
+    "subTotal": 49000.0
+  },
+  "message": "Item added to cart successfully"
+}
+```
+
+### PUT `/api/cart/items/{itemId}`
+
+```json
+{
+  "success": true,
+  "item": {
+    "id": "717e8725-c639-4172-af8d-5f08c4c4cc76",
+    "productId": "3c030f31-0f79-4d6e-8382-bad86d4df5c8",
+    "productName": "Premium Oak Tile",
+    "quantity": 3,
+    "unitPrice": 24500.0,
+    "subTotal": 73500.0
+  }
+}
+```
+
+### DELETE `/api/cart/items/{itemId}`
+
+```json
+{
+  "success": true
+}
+```
+
+### POST `/api/cart/apply-promo`
+
+```json
+{
+  "success": true,
+  "code": "WELCOME10",
+  "discount": 10.0,
+  "type": "percentage",
+  "discountAmount": 4900.0
+}
+```
+
+### GET `/api/cart/related`
+
+```json
+[
+  {
+    "id": "f58df035-b26c-4f3f-855f-661d2d3a5138",
+    "name": "Walnut Plank",
+    "price": 30000.0,
+    "image": "https://cdn.example.com/p/walnut.jpg",
+    "rating": 4.5
+  }
+]
+```
+
+### GET `/api/checkout`
+
+```json
+{
+  "items": [
+    {
+      "productId": "3c030f31-0f79-4d6e-8382-bad86d4df5c8",
+      "name": "Premium Oak Tile",
+      "unitPrice": 24500.0,
+      "quantity": 2,
+      "subtotal": 49000.0,
+      "image": "https://cdn.example.com/p/oak.jpg"
+    }
+  ],
+  "subtotal": 49000.0,
+  "shipping": 5000.0,
+  "tax": 3675.0,
+  "discount": 0.0,
+  "total": 57675.0,
+  "savedAddresses": [
+    {
+      "id": "165f9f3e-8c85-4864-af22-a1e86e3984e0",
+      "fullName": "John Doe",
+      "street": "12 Allen Ave",
+      "city": "Ikeja",
+      "state": "Lagos",
+      "postalCode": "100001",
+      "country": "Nigeria",
+      "phone": "08012345678",
+      "deliveryNotes": null,
+      "isDefault": true
+    }
+  ],
+  "defaultAddress": {
+    "id": "165f9f3e-8c85-4864-af22-a1e86e3984e0",
+    "fullName": "John Doe",
+    "street": "12 Allen Ave",
+    "city": "Ikeja",
+    "state": "Lagos",
+    "postalCode": "100001",
+    "country": "Nigeria",
+    "phone": "08012345678",
+    "deliveryNotes": null,
+    "isDefault": true
+  }
+}
+```
+
+### POST `/api/checkout/validate-promo`
+
+```json
+{
+  "success": true,
+  "code": "WELCOME10",
+  "discount": 10.0,
+  "type": "percentage",
+  "discountAmount": 4900.0,
+  "message": "Promo code applied successfully."
+}
+```
+
+### POST `/api/checkout/payment`
+
+```json
+{
+  "success": true,
+  "orderId": "3c7f6a6c-91d5-4015-af9f-1aeb6098f016",
+  "orderNumber": "ORD202602210001",
+  "message": "Checkout payment request accepted.",
+  "idempotent": false
+}
+```
+
+### GET `/api/orders`
+
+```json
+[
+  {
+    "id": "3c7f6a6c-91d5-4015-af9f-1aeb6098f016",
+    "orderNumber": "ORD202602210001",
+    "status": "Pending",
+    "paymentStatus": "Pending",
+    "total": 57675.0,
+    "createdAt": "2026-02-21T12:00:00Z"
+  }
+]
+```
+
+### GET `/api/orders/{orderId}`
+
+```json
+{
+  "id": "3c7f6a6c-91d5-4015-af9f-1aeb6098f016",
+  "orderNumber": "ORD202602210001",
+  "userId": "2f9d7b7d-1a89-49f1-95ea-1d87dbcb7d90",
+  "userEmail": "user@example.com",
+  "status": 0,
+  "statusName": "Pending",
+  "paymentStatus": 0,
+  "paymentStatusName": "Pending",
+  "subTotal": 49000.0,
+  "shippingCost": 5000.0,
+  "tax": 3675.0,
+  "discount": 0.0,
+  "total": 57675.0,
+  "shippingFullName": "John Doe",
+  "shippingPhone": "08012345678",
+  "shippingAddress": "12 Allen Ave",
+  "shippingCity": "Ikeja",
+  "shippingState": "Lagos",
+  "items": [
+    {
+      "id": "0101df6e-2ce0-48d9-93f2-5721d7b46f56",
+      "productId": "3c030f31-0f79-4d6e-8382-bad86d4df5c8",
+      "productName": "Premium Oak Tile",
+      "quantity": 2,
+      "unitPrice": 24500.0,
+      "subTotal": 49000.0
+    }
+  ],
+  "createdAt": "2026-02-21T12:00:00Z",
+  "updatedAt": "2026-02-21T12:00:00Z"
+}
+```
+
+### GET `/api/orders/{orderId}/invoice`
+
+```json
+{
+  "success": true,
+  "url": "https://localhost:5001/api/v1/orders/3c7f6a6c-91d5-4015-af9f-1aeb6098f016/invoice/document"
+}
+```
+
+### GET `/api/v1/orders/{orderId}/invoice/document`
+
+```json
+{
+  "invoiceNumber": "INV-ORD202602210001",
+  "orderNumber": "ORD202602210001",
+  "issuedAt": "2026-02-21T12:05:00Z",
+  "customer": {
+    "name": "John Doe",
+    "email": "user@example.com",
+    "phone": "08012345678"
+  },
+  "shippingAddress": {
+    "fullName": "John Doe",
+    "address": "12 Allen Ave",
+    "city": "Ikeja",
+    "state": "Lagos"
+  },
+  "items": [
+    {
+      "productId": "3c030f31-0f79-4d6e-8382-bad86d4df5c8",
+      "name": "Premium Oak Tile",
+      "sku": "TILE-OAK-001",
+      "quantity": 2,
+      "unitPrice": 24500.0,
+      "subTotal": 49000.0
+    }
+  ],
+  "totals": {
+    "subTotal": 49000.0,
+    "shipping": 5000.0,
+    "tax": 3675.0,
+    "discount": 0.0,
+    "total": 57675.0
+  },
+  "payment": {
+    "status": "Pending",
+    "method": null,
+    "reference": "idem-3f7f2e3e",
+    "paidAt": null
+  }
+}
+```
+
+## 4) Phase 2 Samples
+
+### GET `/api/saved`
+
+```json
+{
+  "items": [
+    {
+      "id": "bb1f96dc-8f35-4ca1-8569-a360444b02e7",
+      "productId": "3c030f31-0f79-4d6e-8382-bad86d4df5c8",
+      "name": "Premium Oak Tile",
+      "category": "Tiles",
+      "price": 24500.0,
+      "image": "https://cdn.example.com/p/oak.jpg",
+      "savedAt": "2026-02-21T12:12:00Z"
+    }
+  ],
+  "boards": [
+    {
+      "id": "cce6c3e4-7d64-48e2-af18-5f8be795bbca",
+      "name": "Kitchen Ideas",
+      "itemCount": 1,
+      "createdAt": "2026-02-21T12:20:00Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 1,
+    "totalPages": 1,
+    "hasMore": false
+  }
+}
+```
+
+### POST `/api/saved`
+
+```json
+{
+  "success": true
+}
+```
+
+### DELETE `/api/saved/{id}`
+
+```json
+{
+  "success": true
+}
+```
+
+### POST `/api/saved/{id}/add-to-cart`
+
+```json
+{
+  "success": true,
+  "message": "Item added to cart"
+}
+```
+
+### POST `/api/saved/{id}/add-to-moodboard`
+
+```json
+{
+  "success": true,
+  "message": "Item added to moodboard"
+}
+```
+
+### POST `/api/saved/create-board`
+
+```json
+{
+  "success": true,
+  "boardId": "cce6c3e4-7d64-48e2-af18-5f8be795bbca",
+  "boardName": "Kitchen Ideas",
+  "itemCount": 3
+}
+```
+
+### POST `/api/saved/buy-all`
+
+```json
+{
+  "success": true,
+  "total": 73500.0,
+  "itemCount": 3
+}
+```
+
+### GET `/api/designs`
+
+```json
+{
+  "designs": [
+    {
+      "id": "a6453472-3a61-4d55-89d9-95b57eb675dc",
+      "projectId": "ac39cd86-a09c-45f8-a1a6-2fddc2681b66",
+      "roomType": "kitchen",
+      "prompt": "Modern oak and warm lighting",
+      "url": "https://replicate.delivery/pbxt/.../output.png",
+      "outputType": "Image",
+      "createdAt": "2026-02-21T12:30:00Z",
+      "isFavorite": true
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 1,
+    "totalPages": 1,
+    "hasMore": false
+  }
+}
+```
+
+### GET `/api/designs/{id}`
+
+```json
+{
+  "id": "a6453472-3a61-4d55-89d9-95b57eb675dc",
+  "projectId": "ac39cd86-a09c-45f8-a1a6-2fddc2681b66",
+  "outputUrl": "https://replicate.delivery/pbxt/.../output.png",
+  "outputType": "Image",
+  "width": 1280,
+  "height": 720,
+  "durationSeconds": null,
+  "prompt": "Modern oak and warm lighting",
+  "roomType": "kitchen",
+  "isFavorite": true,
+  "createdAt": "2026-02-21T12:30:00Z"
+}
+```
+
+### POST `/api/designs/{id}/favorite`
+
+```json
+{
+  "success": true,
+  "isFavorite": true
+}
+```
+
+### DELETE `/api/designs/{id}`
+
+```json
+{
+  "success": true
+}
+```
+
+### GET `/api/designs/{id}/download?quality=high`
+
+```json
+{
+  "success": true,
+  "downloadUrl": "https://replicate.delivery/pbxt/.../output.png?quality=high"
+}
+```
+
+### POST `/api/designs/{id}/share`
+
+```json
+{
+  "success": true,
+  "shareUrl": "https://localhost:5001/api/designs/a6453472-3a61-4d55-89d9-95b57eb675dc/download?token=7f7a53..."
+}
+```
+
+### GET `/api/dashboard/recent-order`
+
+```json
+{
+  "hasOrder": true,
+  "orderId": "3c7f6a6c-91d5-4015-af9f-1aeb6098f016",
+  "orderNumber": "ORD202602210001",
+  "status": "Pending",
+  "paymentStatus": "Pending",
+  "total": 57675.0,
+  "createdAt": "2026-02-21T12:00:00Z"
+}
+```
+
+### GET `/api/dashboard/latest-design`
+
+```json
+{
+  "hasDesign": true,
+  "designId": "a6453472-3a61-4d55-89d9-95b57eb675dc",
+  "outputUrl": "https://replicate.delivery/pbxt/.../output.png",
+  "outputType": "Image",
+  "createdAt": "2026-02-21T12:30:00Z"
+}
+```
+
+### GET `/api/dashboard/consultations`
+
+> Note: this endpoint is currently hardcoded in `DashboardController`, so the counts are placeholders until consultation data is wired up.
+
+```json
+{
+  "upcomingCount": 0,
+  "completedCount": 0,
+  "nextConsultation": null
+}
+```
+
+### GET `/api/dashboard/saved-items`
+
+```json
+{
+  "totalSaved": 5,
+  "latestSavedIds": [
+    "bb1f96dc-8f35-4ca1-8569-a360444b02e7",
+    "fc77af21-2af4-4fb3-ab9f-a4e985d5ef2d"
+  ]
+}
+```
+
+### GET `/api/dashboard/orders/{orderId}/tracking`
+
+```json
+{
+  "success": true,
+  "trackingUrl": "https://tracking.example.com/track/TBM1234567"
+}
+```
+
+### GET `/api/account/profile`
+
+```json
+{
+  "id": "2f9d7b7d-1a89-49f1-95ea-1d87dbcb7d90",
+  "email": "user@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "fullName": "John Doe",
+  "phoneNumber": "08012345678",
+  "isActive": true,
+  "emailVerified": true,
+  "avatarUrl": "https://res.cloudinary.com/.../avatar.jpg",
+  "addresses": [
+    {
+      "id": "165f9f3e-8c85-4864-af22-a1e86e3984e0",
+      "fullName": "John Doe",
+      "street": "12 Allen Ave",
+      "city": "Ikeja",
+      "state": "Lagos",
+      "postalCode": "100001",
+      "country": "Nigeria",
+      "phone": "08012345678",
+      "deliveryNotes": null,
+      "isDefault": true
+    }
+  ]
+}
+```
+
+### PUT `/api/account/profile`
+
+```json
+{
+  "success": true,
+  "data": {
+    "firstName": "John",
+    "lastName": "Doe",
+    "phoneNumber": "08012345678"
+  }
+}
+```
+
+### PUT `/api/account/email`
+
+```json
+{
+  "success": true,
+  "message": "Email updated successfully"
+}
+```
+
+### PUT `/api/account/phone`
+
+```json
+{
+  "success": true,
+  "message": "Phone updated successfully"
+}
+```
+
+### POST `/api/account/addresses`
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "165f9f3e-8c85-4864-af22-a1e86e3984e0",
+    "fullName": "John Doe",
+    "street": "12 Allen Ave",
+    "city": "Ikeja",
+    "state": "Lagos",
+    "postalCode": "100001",
+    "country": "Nigeria",
+    "phone": "08012345678",
+    "deliveryNotes": null,
+    "isDefault": true
+  }
+}
+```
+
+### PUT `/api/account/addresses/{addressId}`
+
+```json
+{
+  "success": true
+}
+```
+
+### DELETE `/api/account/addresses/{addressId}`
+
+```json
+{
+  "success": true
+}
+```
+
+### PUT `/api/account/addresses/{addressId}/default`
+
+```json
+{
+  "success": true
+}
+```
+
+### PUT `/api/account/password`
+
+```json
+{
+  "success": true,
+  "message": "Password updated successfully"
+}
+```
+
+### GET `/api/account/security`
+
+```json
+{
+  "twoFactorEnabled": false
+}
+```
+
+### PUT `/api/account/security/2fa`
+
+```json
+{
+  "success": true
+}
+```
+
+### GET `/api/account/notifications`
+
+```json
+{
+  "emailOrderUpdates": true,
+  "emailPromotions": false,
+  "pushOrderUpdates": true,
+  "pushMarketing": false
+}
+```
+
+### PUT `/api/account/notifications`
+
+```json
+{
+  "success": true
+}
+```
+
+### GET `/api/account/brand-access`
+
+```json
+{
+  "roles": [
+    "Customer"
+  ],
+  "canUseStore": true,
+  "canUseAdmin": false
+}
+```
+
+### POST `/api/account/deactivate`
+
+```json
+{
+  "success": true,
+  "message": "Account deactivated"
+}
+```
+
+### DELETE `/api/account`
+
+```json
+{
+  "success": true,
+  "message": "Account deleted successfully"
+}
+```
+
+### POST `/api/account/avatar` (multipart/form-data)
+
+```json
+{
+  "success": true,
+  "avatarUrl": "https://res.cloudinary.com/.../avatar-2f9d...jpg"
+}
+```
+
+## 5) Vendor Samples
+
+### GET `/api/v1/vendor/dashboard`
+
+```json
+{
+  "ownedProducts": 12,
+  "lowStockProducts": 3,
+  "assignedOrders": 7,
+  "pendingOrders": 4,
+  "inProgressOrders": 2,
+  "unreadNotifications": 5,
+  "unreadMessages": 1
+}
+```
+
+### GET `/api/v1/vendor/alerts`
+
+```json
+[
+  {
+    "type": "inventory",
+    "severity": "warning",
+    "message": "Premium Oak Tile is low on stock.",
+    "productId": "3c030f31-0f79-4d6e-8382-bad86d4df5c8",
+    "orderId": null,
+    "createdAtUtc": "2026-03-25T08:00:00Z"
+  },
+  {
+    "type": "order",
+    "severity": "info",
+    "message": "Order ORD202603250014 was assigned to your team.",
+    "productId": null,
+    "orderId": "5f9a5d2e-3d8b-4b3d-8f5d-7c2f8e6a9012",
+    "createdAtUtc": "2026-03-25T09:10:00Z"
+  }
+]
+```
+
+### GET `/api/v1/vendor/inventory`
+
+```json
+{
+  "items": [
+    {
+      "productId": "3c030f31-0f79-4d6e-8382-bad86d4df5c8",
+      "productName": "Premium Oak Tile",
+      "sku": "TILE-OAK-001",
+      "stockQuantity": 35,
+      "lowStockThreshold": 10,
+      "isLowStock": false,
+      "isActive": true,
+      "price": 24500.0
+    },
+    {
+      "productId": "f58df035-b26c-4f3f-855f-661d2d3a5138",
+      "productName": "Walnut Plank",
+      "sku": "PLANK-WAL-004",
+      "stockQuantity": 6,
+      "lowStockThreshold": 8,
+      "isLowStock": true,
+      "isActive": true,
+      "price": 32000.0
+    }
+  ],
+  "total": 2,
+  "page": 1,
+  "pageSize": 20
+}
+```
+
+### POST `/api/inventory/products`
+
+```json
+{
+  "productId": "a1b2c3d4-e5f6-47a8-9b0c-1234567890ab",
+  "productName": "Chevron Pine Panel",
+  "sku": "PANEL-PINE-002",
+  "stockQuantity": 24,
+  "lowStockThreshold": 8,
+  "isLowStock": false,
+  "isActive": true,
+  "price": 32000.0
+}
+```
+
+### DELETE `/api/inventory/products/{productId}`
+
+```json
+{
+  "success": true
+}
+```
+
+### GET `/api/inventory/stats`
+
+```json
+{
+  "totalProducts": 12,
+  "activeProducts": 11,
+  "lowStockProducts": 3,
+  "outOfStockProducts": 1,
+  "totalStockUnits": 184
+}
+```
+
+### GET `/api/v1/vendor/notifications`
+
+```json
+{
+  "items": [
+    {
+      "id": "notif-001",
+      "vendorId": "2f9d7b7d-1a89-49f1-95ea-1d87dbcb7d90",
+      "type": "stock_alert",
+      "title": "Low stock warning",
+      "body": "Premium Oak Tile is running low on stock.",
+      "isRead": false,
+      "orderId": null,
+      "createdAtUtc": "2026-03-25T08:30:00Z"
+    },
+    {
+      "id": "notif-002",
+      "vendorId": "2f9d7b7d-1a89-49f1-95ea-1d87dbcb7d90",
+      "type": "order_update",
+      "title": "Order status updated",
+      "body": "Order ORD202603250014 moved to InProgress.",
+      "isRead": true,
+      "orderId": "5f9a5d2e-3d8b-4b3d-8f5d-7c2f8e6a9012",
+      "createdAtUtc": "2026-03-25T09:05:00Z"
+    }
+  ],
+  "total": 2,
+  "page": 1,
+  "pageSize": 20
+}
+```
+
+### PATCH `/api/v1/vendor/notifications/{notificationId}/read`
+
+```json
+{
+  "success": true
+}
+```
+
+### PUT `/api/notifications/mark-all-read`
+
+```json
+{
+  "success": true,
+  "markedCount": 2
+}
+```
+
+> The remaining vendor list endpoints (`activity`, `deliveries`, `messages`, `orders`, and `orders/{orderId}`) follow the same DTO contracts listed in the main API documentation.
+
+## 6) Common Error Samples
+
+### Invalid promo
+
+```json
+{
+  "success": false,
+  "message": "Invalid promo code."
+}
+```
+
+### Missing account password on delete
+
+```json
+{
+  "success": false,
+  "message": "Password is required and must be valid"
+}
+```
+
+### Ownership-protected design/saved/order
+
+```json
+{
+  "success": false,
+  "message": "Design not found"
+}
+```

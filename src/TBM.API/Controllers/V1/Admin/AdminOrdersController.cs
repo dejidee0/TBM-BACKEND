@@ -6,7 +6,7 @@ using TBM.Application.Services;
 using TBM.Core.Enums;
 
 [ApiController]
-[Route("api/admin/orders")]
+[Route("api/v1/admin/orders")]
 [Authorize(Roles = "Admin,SuperAdmin")]
 public class AdminOrdersController : ControllerBase
 {

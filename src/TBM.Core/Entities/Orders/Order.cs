@@ -8,7 +8,11 @@ namespace TBM.Core.Entities.Orders;
 public class Order : AuditableEntity
 {
     public string OrderNumber { get; set; } = string.Empty;
-    public Guid UserId { get; set; }
+    public Guid? UserId { get; set; }
+    public Guid? DesignSessionId { get; set; }
+    public string? GuestEmail { get; set; }
+    public string? GuestPhone { get; set; }
+    public bool IsGuestOrder { get; set; }
     
     // Order Status
     public OrderStatus Status { get; set; }
@@ -35,6 +39,8 @@ public class Order : AuditableEntity
     // Payment Details
     public string? PaymentReference { get; set; }
     public DateTime? PaidAt { get; set; }
+    // Concurrency token for optimistic concurrency control
+    public byte[]? RowVersion { get; set; }
     
     // Tracking
     public string? TrackingNumber { get; set; }
@@ -48,6 +54,6 @@ public class Order : AuditableEntity
     public string? AdminNotes { get; set; }
     
     // Navigation properties
-    public User User { get; set; } = null!;
+    public User? User { get; set; }
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
 }

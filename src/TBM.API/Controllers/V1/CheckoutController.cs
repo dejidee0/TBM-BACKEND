@@ -10,7 +10,6 @@ namespace TBM.API.Controllers.V1;
 [ApiController]
 [Route("api/v1/[controller]")]
 [EnableRateLimiting("DynamicPolicy")]
-[Authorize]
 public class CheckoutController : ControllerBase
 {
     private readonly ICheckoutService _checkoutService;
@@ -20,12 +19,12 @@ public class CheckoutController : ControllerBase
         _checkoutService = checkoutService;
     }
 
-    
+    [AllowAnonymous]
     [HttpGet]
     public async Task<IActionResult> GetCheckout([FromQuery] string? promoCode = null)
     {
-        var userId = GetUserId();
-        var result = await _checkoutService.GetCheckoutSummaryAsync(userId, promoCode);
+        var userId = GetUserIdOrNull();
+        var result = await _checkoutService.GetCheckoutSummaryAsync(userId, Request.Cookies["tbm_guest_id"], promoCode);
 
         if (!result.Success || result.Data == null)
         {
@@ -50,12 +49,12 @@ public class CheckoutController : ControllerBase
         });
     }
 
-    
+    [AllowAnonymous]
     [HttpPost("validate-promo")]
     public async Task<IActionResult> ValidatePromo([FromBody] PromoValidationRequestDto dto)
     {
-        var userId = GetUserId();
-        var result = await _checkoutService.ValidatePromoAsync(userId, dto.Code);
+        var userId = GetUserIdOrNull();
+        var result = await _checkoutService.ValidatePromoAsync(userId, Request.Cookies["tbm_guest_id"], dto.Code);
 
         if (!result.Success || result.Data == null)
         {
@@ -77,11 +76,12 @@ public class CheckoutController : ControllerBase
         });
     }
 
-   
+    [AllowAnonymous]
     [HttpPost("payment")]
     public async Task<IActionResult> ProcessPayment([FromBody] CheckoutPaymentRequestDto dto)
     {
-        var userId = GetUserId();
+        var userId = GetUserIdOrNull();
+        dto.GuestSessionId ??= Request.Cookies["tbm_guest_id"];
         var idempotencyKey = Request.Headers["Idempotency-Key"].FirstOrDefault()
             ?? Request.Headers["X-Idempotency-Key"].FirstOrDefault();
 
@@ -112,6 +112,7 @@ public class CheckoutController : ControllerBase
         });
     }
 
+    [Authorize]
     [HttpGet("payment/paystack/verify/{reference}")]
     public async Task<IActionResult> VerifyPaystackPayment([FromRoute] string reference)
     {
@@ -151,5 +152,16 @@ public class CheckoutController : ControllerBase
         }
 
         return userId;
+    }
+
+    private Guid? GetUserIdOrNull()
+    {
+        if (User.Identity?.IsAuthenticated != true)
+        {
+            return null;
+        }
+
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(userIdClaim, out var userId) ? userId : null;
     }
 }

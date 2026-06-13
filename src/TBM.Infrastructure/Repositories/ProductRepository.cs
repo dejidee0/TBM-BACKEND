@@ -188,6 +188,23 @@ public class ProductRepository : IProductRepository
         
         return await query.AnyAsync();
     }
+
+    public async Task<List<Product>> GetInventoryCandidatesAsync()
+    {
+        return await _context.Products
+            .Include(p => p.Category)
+            .Include(p => p.Images.OrderBy(i => i.DisplayOrder))
+            .Where(p =>
+                p.IsActive &&
+                p.TrackInventory &&
+                p.StockQuantity.HasValue &&
+                p.StockQuantity.Value > 0 &&
+                p.Price.HasValue &&
+                p.ProductType == ProductType.PhysicalProduct)
+            .OrderBy(p => p.DisplayOrder)
+            .ThenByDescending(p => p.CreatedAt)
+            .ToListAsync();
+    }
     
     public async Task UpdateStockAsync(Guid productId, int quantity)
     {
@@ -197,5 +214,65 @@ public class ProductRepository : IProductRepository
             product.StockQuantity = quantity;
             _context.Products.Update(product);
         }
+    }
+    
+    public async Task<int> UpdateStockAtomicAsync(Guid productId, int quantityToSubtract)
+    {
+        // Atomic update: decrements stock directly in SQL to avoid concurrency issues
+        // Returns the number of rows affected (0 if product not found, doesn't track inventory, or has insufficient stock)
+        // This also prevents negative stock by checking that current stock >= quantity to subtract
+        return await _context.Database.ExecuteSqlRawAsync(
+            "UPDATE Products SET StockQuantity = StockQuantity - {0} WHERE Id = {1} AND TrackInventory = 1 AND StockQuantity IS NOT NULL AND StockQuantity >= {0}",
+            quantityToSubtract, productId);
+    }
+
+    /// <summary>
+    /// Finds active Bogat products whose AI metadata (AIKeywords, MaterialType,
+    /// RecommendedFor, Tags, Name) contains any of the supplied keywords.
+    /// Used to surface purchasable materials after an AI design generation.
+    /// </summary>
+    public async Task<List<Product>> SearchByAIKeywordsAsync(IEnumerable<string> keywords, int limit = 8)
+    {
+        var kws = keywords
+            .Where(k => !string.IsNullOrWhiteSpace(k))
+            .Select(k => k.Trim().ToLower())
+            .Distinct()
+            .ToList();
+
+        if (kws.Count == 0)
+            return new List<Product>();
+
+        var query = _context.Products
+            .Include(p => p.Category)
+            .Include(p => p.Images.OrderBy(i => i.DisplayOrder))
+            .Where(p => p.IsActive && !p.IsDeleted);
+
+        // Build OR predicate: product matches if ANY keyword appears in ANY of its metadata fields.
+        // EF Core translates each Contains() to SQL LIKE '%keyword%'.
+        query = query.Where(p => kws.Any(kw =>
+            (p.AIKeywords != null && p.AIKeywords.ToLower().Contains(kw)) ||
+            (p.MaterialType != null && p.MaterialType.ToLower().Contains(kw)) ||
+            (p.RecommendedFor != null && p.RecommendedFor.ToLower().Contains(kw)) ||
+            (p.Tags != null && p.Tags.ToLower().Contains(kw)) ||
+            p.Name.ToLower().Contains(kw) ||
+            (p.ShortDescription != null && p.ShortDescription.ToLower().Contains(kw))
+        ));
+
+        return await query
+            .OrderByDescending(p => p.IsFeatured)
+            .ThenBy(p => p.DisplayOrder)
+            .Take(limit)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Bulk-inserts a batch of products in a single round-trip.
+    /// Caller is responsible for calling SaveChangesAsync.
+    /// </summary>
+    public async Task<List<Product>> BulkCreateAsync(IEnumerable<Product> products)
+    {
+        var list = products.ToList();
+        await _context.Products.AddRangeAsync(list);
+        return list;
     }
 }

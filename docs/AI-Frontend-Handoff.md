@@ -1,0 +1,462 @@
+# AI Frontend Handoff
+
+## Purpose
+
+This document is the frontend integration handoff for the AI studio flow after the backend contract refactor.
+
+Use this document as the source of truth for:
+
+- which endpoints to call
+- the exact request payloads
+- the actual response shapes
+- what changed from the older AI integration assumptions
+
+## Product intent
+
+The AI studio is now modeled as:
+
+- prompt + uploaded source image are the core inputs
+- user chooses output type
+- `video` is the default and primary experience
+- `image` is also supported as an additional output
+
+This is not a prompt-only generator.
+
+## Canonical frontend flow
+
+For the AI studio screens, use this sequence:
+
+1. Upload source image
+2. Create AI project
+3. Generate output based on selected output type
+4. Refresh projects or update local result state
+
+Do not use the design-session flow as the main integration for the AI studio screen.
+
+## Base route
+
+Backend routes:
+
+- `/api/v1/ai/*`
+
+Frontend proxy routes:
+
+- `/api/proxy/v1/ai/*`
+
+All calls require authenticated user context.
+
+## Enum values
+
+### Output type
+
+Use `outputType` on project creation.
+
+- `1` = `Image`
+- `2` = `Video`
+
+Default frontend selection:
+
+- `2` (`Video`)
+
+### Backward-compatible generation type
+
+The backend still supports `generationType`, but the frontend should prefer `outputType`.
+
+- `1` = `ImageToImage`
+- `2` = `ImageToVideo`
+
+### Project status
+
+- `1` = `Pending`
+- `2` = `Processing`
+- `3` = `Completed`
+- `4` = `Failed`
+
+## Endpoint contract
+
+## 1. Upload source image
+
+### Route
+
+`POST /api/proxy/v1/ai/upload-room`
+
+### Request
+
+- content type: `multipart/form-data`
+- field name: `file`
+
+Example:
+
+```js
+const formData = new FormData();
+formData.append("file", file);
+
+await fetch("/api/proxy/v1/ai/upload-room", {
+  method: "POST",
+  credentials: "include",
+  body: formData,
+});
+```
+
+### Success response
+
+```json
+{
+  "success": true,
+  "imageUrl": "https://cdn.example.com/ai/source-room.png"
+}
+```
+
+### Failure response
+
+```json
+{
+  "success": false,
+  "message": "A source image file is required."
+}
+```
+
+## 2. Create AI project
+
+### Route
+
+`POST /api/proxy/v1/ai/projects`
+
+### Required request body
+
+```json
+{
+  "sourceImageUrl": "https://cdn.example.com/ai/source-room.png",
+  "outputType": 2,
+  "prompt": "Create a cinematic walkthrough of this room with warm lighting and modern furniture styling",
+  "contextLabel": "Living Room"
+}
+```
+
+### Notes
+
+- `sourceImageUrl` is required
+- `prompt` is required
+- `outputType` is required for frontend use
+- `contextLabel` is optional
+- `generationType` is still accepted by the backend, but frontend should not prefer it
+
+### Success response
+
+```json
+{
+  "id": "11111111-1111-1111-1111-111111111111",
+  "status": 1,
+  "generationType": 2,
+  "outputType": 2,
+  "sourceImageUrl": "https://cdn.example.com/ai/source-room.png",
+  "prompt": "Create a cinematic walkthrough of this room with warm lighting and modern furniture styling",
+  "contextLabel": "Living Room",
+  "createdAt": "2026-04-06T10:00:00Z",
+  "updatedAt": null
+}
+```
+
+### Failure response
+
+```json
+{
+  "success": false,
+  "message": "prompt is required when creating an AI project."
+}
+```
+
+## 3A. Generate image output
+
+### Route
+
+`POST /api/proxy/v1/ai/generate/image`
+
+### Minimum request body
+
+If the project was already created with prompt and image, this is enough:
+
+```json
+{
+  "projectId": "11111111-1111-1111-1111-111111111111"
+}
+```
+
+### Optional override request body
+
+Use this only if frontend wants to override the stored project values for a single generation call:
+
+```json
+{
+  "projectId": "11111111-1111-1111-1111-111111111111",
+  "prompt": "Make it brighter with more natural wood accents",
+  "sourceImageUrl": "https://cdn.example.com/ai/source-room-v2.png"
+}
+```
+
+### Success response
+
+```json
+{
+  "designId": "22222222-2222-2222-2222-222222222222",
+  "projectId": "11111111-1111-1111-1111-111111111111",
+  "outputType": 1,
+  "outputUrl": "https://res.cloudinary.com/.../generated-image.png",
+  "width": 1024,
+  "height": 1024,
+  "durationSeconds": null,
+  "provider": "OpenAI",
+  "providerJobId": "provider-job-id",
+  "createdAt": "2026-04-06T10:01:00Z"
+}
+```
+
+## 3B. Generate video output
+
+### Route
+
+`POST /api/proxy/v1/ai/generate/video`
+
+### Recommended request body
+
+```json
+{
+  "projectId": "33333333-3333-3333-3333-333333333333",
+  "durationSeconds": 9
+}
+```
+
+### Optional override request body
+
+```json
+{
+  "projectId": "33333333-3333-3333-3333-333333333333",
+  "prompt": "Create a cinematic walkthrough with softer warm lighting",
+  "sourceImageUrl": "https://cdn.example.com/ai/source-room-v2.png",
+  "durationSeconds": 9
+}
+```
+
+### Notes
+
+- `durationSeconds` must be greater than zero
+- backend default is `9`
+- frontend can keep `9` as the current default
+- video remains the default-selected output type in the UI
+
+### Success response
+
+```json
+{
+  "designId": "44444444-4444-4444-4444-444444444444",
+  "projectId": "33333333-3333-3333-3333-333333333333",
+  "outputType": 2,
+  "outputUrl": "https://res.cloudinary.com/.../generated-video.mp4",
+  "width": 1280,
+  "height": 720,
+  "durationSeconds": 9,
+  "provider": "OpenAI",
+  "providerJobId": "provider-job-id",
+  "createdAt": "2026-04-06T10:01:00Z"
+}
+```
+
+## 4. List AI projects
+
+### Route
+
+`GET /api/proxy/v1/ai/projects`
+
+### Success response
+
+```json
+[
+  {
+    "id": "33333333-3333-3333-3333-333333333333",
+    "status": 3,
+    "generationType": 2,
+    "outputType": 2,
+    "contextLabel": "Living Room",
+    "createdAt": "2026-04-06T10:00:00Z",
+    "latestDesignUrl": "https://res.cloudinary.com/.../generated-video.mp4",
+    "designCount": 1
+  }
+]
+```
+
+## Error handling
+
+### Validation or business-rule error
+
+Status:
+
+- `400`
+
+Shape:
+
+```json
+{
+  "success": false,
+  "message": "Project generation type does not support video generation."
+}
+```
+
+### Auth/ownership error
+
+Status:
+
+- `403`
+
+Shape:
+
+```json
+{
+  "success": false,
+  "message": "Invalid AI project."
+}
+```
+
+### Quota/subscription error
+
+Status:
+
+- `403`
+
+Shape:
+
+```json
+{
+  "success": false,
+  "code": "subscription_quota_exceeded",
+  "message": "AI generation quota exceeded."
+}
+```
+
+### Server error
+
+Status:
+
+- `500`
+
+Shape:
+
+```json
+{
+  "success": false,
+  "message": "AI video generation failed."
+}
+```
+
+Frontend parsing rule:
+
+- read `message` first
+- optionally read `code` for quota-specific UX
+
+## What changed from the old frontend assumptions
+
+### Stop doing this
+
+Do not create AI projects like this:
+
+```json
+{
+  "name": "Prompt title",
+  "description": "Full prompt"
+}
+```
+
+Do not treat this as enough for video generation:
+
+```json
+{
+  "projectId": "..."
+}
+```
+
+without the project having already been created with prompt and image.
+
+Do not treat the AI studio as prompt-only.
+
+Do not use the design-session endpoints as the main AI studio flow.
+
+### Do this instead
+
+Create project with:
+
+```json
+{
+  "sourceImageUrl": "...",
+  "outputType": 2,
+  "prompt": "...",
+  "contextLabel": "Living Room"
+}
+```
+
+Then generate:
+
+- image: `POST /ai/generate/image`
+- video: `POST /ai/generate/video`
+
+## Recommended frontend state model
+
+The UI should keep these values in state:
+
+- `file`
+- `uploadedImageUrl`
+- `prompt`
+- `contextLabel` or `roomType`
+- `outputType`
+- `projectId`
+- `generationResult`
+
+Recommended defaults:
+
+- `outputType = 2`
+- `durationSeconds = 9`
+
+## Recommended submission logic
+
+```js
+async function handleGenerate() {
+  const upload = await uploadRoom(file);
+
+  const project = await createProject({
+    sourceImageUrl: upload.imageUrl,
+    outputType,
+    prompt,
+    contextLabel,
+  });
+
+  if (outputType === 1) {
+    return generateImage({ projectId: project.id });
+  }
+
+  return generateVideo({
+    projectId: project.id,
+    durationSeconds: 9,
+  });
+}
+```
+
+## Frontend QA checklist
+
+- user cannot submit without an uploaded image
+- user cannot submit without a prompt
+- `Video` is selected by default
+- user can switch to `Image`
+- image upload uses form field `file`
+- project creation uses `outputType`, not only `generationType`
+- image generation works with `projectId` only after project creation
+- video generation works with `projectId + durationSeconds`
+- quota failures surface the backend `message`
+- project list can render `outputType`, `status`, `latestDesignUrl`, and `designCount`
+
+## Final integration rule
+
+For the AI studio:
+
+- always upload image first
+- always create project second
+- always generate from the created project
+- keep `video` as the default output
+- keep `image` as the alternate supported output

@@ -8,6 +8,8 @@ using TBM.Core.Enums;
 using TBM.Core.Interfaces;
 using TBM.Core.Interfaces.Repositories;
 using TBM.Core.Interfaces.Repositories.AI;
+using TBM.Core.Interfaces.Repositories.DesignFlow;
+using TBM.Core.Interfaces.Repositories.Subscriptions;
 using TBM.Infrastructure.Data;
 using TBM.Infrastructure.Repositories;
 
@@ -230,8 +232,17 @@ public sealed class CartMergeServiceTests
         public IOrderRepository Orders => throw new NotImplementedException();
         public IOrderStatusHistoryRepository OrderStatusHistories => throw new NotImplementedException();
         public IWebhookEventRepository WebhookEvents => throw new NotImplementedException();
+        public IDesignSessionRepository DesignSessions => throw new NotImplementedException();
+        public IBillOfMaterialsRepository BillsOfMaterials => throw new NotImplementedException();
+        public IProjectRepository Projects => throw new NotImplementedException();
+        public ISubscriptionRepository Subscriptions => throw new NotImplementedException();
+        public IPricingConfigRepository PricingConfigs => throw new NotImplementedException();
+        public IDiscountRepository Discounts => throw new NotImplementedException();
+        public IPortfolioRepository Portfolio => throw new NotImplementedException();
 
         public Task<int> SaveChangesAsync() => _context.SaveChangesAsync();
+
+        public void ClearChangeTracker() => _context.ChangeTracker.Clear();
 
         public Task BeginTransactionAsync() => Task.CompletedTask;
 

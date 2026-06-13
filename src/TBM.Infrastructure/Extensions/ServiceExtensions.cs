@@ -3,18 +3,21 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TBM.Core.Interfaces;
 using TBM.Core.Interfaces.Repositories;
+using TBM.Core.Interfaces.Repositories.DesignFlow;
+using TBM.Core.Interfaces.Repositories.Subscriptions;
 using TBM.Core.Interfaces.Services;
 using TBM.Infrastructure.Configuration;
 using TBM.Infrastructure.Data;
 using TBM.Infrastructure.Repositories;
+using TBM.Infrastructure.Repositories.DesignFlow;
+using TBM.Infrastructure.Repositories.Subscriptions;
 using TBM.Infrastructure.Services;
 using TBM.Infrastructure.Storage;
-
-
-
-        using TBM.Core.Interfaces.Repositories.AI;
+using TBM.Core.Interfaces.Repositories.AI;
 using TBM.Infrastructure.Repositories.AI;
 using TBM.Application.Services;
+using TBM.Application.Interfaces;
+using TBM.Infrastructure.AI;
 
 namespace TBM.Infrastructure.Extensions;
 
@@ -54,7 +57,18 @@ public static class ServiceExtensions
         services.AddScoped<IContactMessageRepository, ContactMessageRepository>();
         services.AddScoped<ISettingRepository, SettingRepository>();
         services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
+        services.AddScoped<IDesignSessionRepository, DesignSessionRepository>();
+        services.AddScoped<IBillOfMaterialsRepository, BillOfMaterialsRepository>();
+        services.AddScoped<IProjectRepository, ProjectRepository>();
 
+
+        // Subscription repositories
+        services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+        services.AddScoped<IPricingConfigRepository, PricingConfigRepository>();
+        services.AddScoped<IDiscountRepository, DiscountRepository>();
+
+        // Portfolio repository
+        services.AddScoped<IPortfolioRepository, PortfolioRepository>();
 
         // UnitOfWork
         services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -66,12 +80,12 @@ services.AddScoped<IAIDesignRepository, AIDesignRepository>();
 services.AddScoped<IAIUsageRepository, AIUsageRepository>();
 services.AddScoped<IAIRenovationEstimateRepository, AIRenovationEstimateRepository>();
 services.AddScoped<IAIAssistantRepository, AIAssistantRepository>();
+        services.AddHttpClient<IBomGenerationClient, OpenAiBomGenerationClient>();
 
 // Cloudinary
 services.Configure<CloudinarySettings>(configuration.GetSection("Cloudinary"));
 services.AddScoped<IImageStorageService, CloudinaryStorageService>();
 
-    services.AddScoped<ISettingRepository, SettingRepository>();
 services.Configure<ReplicateSettings>(
     configuration.GetSection("AI:Replicate"));
 

@@ -5,7 +5,7 @@ using TBM.Application.Services;
 namespace TBM.API.Controllers.V1.Admin;
 
 [ApiController]
-[Route("api/admin/analytics")]
+[Route("api/v1/admin/analytics")]
 [Authorize(Roles = "Admin,SuperAdmin")]
 public class AdminAnalyticsController : ControllerBase
 {

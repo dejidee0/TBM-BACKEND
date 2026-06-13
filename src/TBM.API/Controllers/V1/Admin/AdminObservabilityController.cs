@@ -6,7 +6,7 @@ using TBM.API.Observability;
 namespace TBM.API.Controllers.V1.Admin;
 
 [ApiController]
-[Route("api/admin/observability")]
+[Route("api/v1/admin/observability")]
 [Authorize(Roles = "Admin,SuperAdmin")]
 [EnableRateLimiting("DynamicPolicy")]
 public class AdminObservabilityController : ControllerBase

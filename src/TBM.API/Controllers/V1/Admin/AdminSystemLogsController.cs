@@ -5,7 +5,7 @@ using TBM.Application.Services;
 namespace TBM.API.Controllers.V1.Admin;
 
 [ApiController]
-[Route("api/admin/system-logs")]
+[Route("api/v1/admin/system-logs")]
 [Authorize(Roles = "Admin,SuperAdmin")]
 public class AdminSystemLogsController : ControllerBase
 {

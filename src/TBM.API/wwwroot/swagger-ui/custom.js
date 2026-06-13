@@ -3,7 +3,7 @@
 
   var brandName = "TBM BUILDING AI VISUALIZER API";
   var consoleName = "API Experience Console";
-  var frontendUrl = "https://tdm-web.vercel.app/";
+  var frontendUrl = "https://www.tbmbuilding.com/";
   var openApiUrl = "/swagger/v1/swagger.json";
   var logoUrl = "/swagger-ui/tbm-logo.svg";
 
@@ -96,9 +96,29 @@
     info.insertBefore(banner, info.firstChild);
   }
 
+  function renameAuthorizeButton() {
+    // Swagger UI renders "Authorize" in a span inside .btn.authorize
+    var btns = document.querySelectorAll(".swagger-ui .btn.authorize");
+    btns.forEach(function (btn) {
+      var span = btn.querySelector("span");
+      if (span && span.textContent.trim().toLowerCase() === "authorize") {
+        span.textContent = "Set API Token";
+      }
+    });
+
+    // Also rename the button inside the auth modal footer
+    var modalBtns = document.querySelectorAll(".swagger-ui .auth-btn-wrapper .btn-done");
+    modalBtns.forEach(function (btn) {
+      if (btn.textContent.trim().toLowerCase() === "close") {
+        btn.textContent = "Done";
+      }
+    });
+  }
+
   function applyBranding() {
     decorateTopbar();
     decorateInfoPanel();
+    renameAuthorizeButton();
   }
 
   var attempts = 0;

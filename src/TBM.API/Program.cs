@@ -16,6 +16,8 @@ using TBM.Application.Helpers;
 using TBM.Application.Interfaces;
 using TBM.Application.Interfaces.Security;
 using TBM.Application.Services;
+using TBM.Application.Services.DesignFlow;
+using TBM.Application.Services.Subscriptions;
 using TBM.Core.Interfaces.AI;
 using TBM.Infrastructure.AI;
 using TBM.Infrastructure.Data;
@@ -52,7 +54,11 @@ builder.Services.AddSwaggerGen(options =>
     });
 
     options.OperationFilter<FileUploadOperationFilter>();
-    
+
+    // Tell Swashbuckle how to represent IFormFile — without this, any DTO that has
+    // an IFormFile property (e.g. UploadAvatarRequest) causes a schema-generation 500.
+    options.MapType<IFormFile>(() => new OpenApiSchema { Type = "string", Format = "binary" });
+
     // Guard against duplicate schema IDs (e.g., same class names in different namespaces)
     options.CustomSchemaIds(type => type.FullName?.Replace("+", ".") ?? type.Name);
     
@@ -112,7 +118,11 @@ builder.Services.AddScoped<AdminFinancialService>();
 builder.Services.AddHttpClient<PaystackService>();
 builder.Services.AddHttpClient<IAIProvider, ReplicateAIProvider>();
 builder.Services.Configure<AssistantLlmSettings>(builder.Configuration.GetSection("AI:Assistant"));
+builder.Services.Configure<TBM.Application.Configuration.AppSettings>(builder.Configuration.GetSection("App"));
 builder.Services.AddHttpClient<IAssistantLlmClient, OpenAIAssistantLlmClient>();
+builder.Services.AddHostedService<AIGenerationBackgroundService>();
+builder.Services.AddHostedService<SubscriptionExpiryJob>();
+builder.Services.AddHostedService<DiscountCleanupJob>();
 
 // ==============================
 // Security
@@ -301,7 +311,39 @@ var app = builder.Build();
 // ==============================
 // Middleware Pipeline
 // ==============================
-app.UseDeveloperExceptionPage();
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var exFeature = context.Features
+            .Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+        var ex = exFeature?.Error;
+
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/json";
+
+        object responseBody = app.Environment.IsDevelopment()
+            ? new
+            {
+                success = false,
+                message = "Internal server error.",
+                error = ex?.GetType().Name,
+                detail = ex?.Message,
+                inner = ex?.InnerException?.Message,
+                stackTrace = ex?.StackTrace
+            }
+            : (object)new
+            {
+                success = false,
+                message = "An unexpected error occurred. Please try again.",
+                error = ex?.GetType().Name,
+                detail = ex?.Message
+            };
+
+        await context.Response.WriteAsync(
+            System.Text.Json.JsonSerializer.Serialize(responseBody));
+    });
+});
 
 app.UseMiddleware<RequestContextMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
@@ -349,6 +391,21 @@ if (app.Environment.IsDevelopment())
     {
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "Database seeding failed");
+    }
+}
+
+// Seed default pricing configs (all environments)
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var pricingService = scope.ServiceProvider.GetRequiredService<PricingConfigService>();
+        await pricingService.SeedDefaultsAsync();
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Pricing config seeding failed");
     }
 }
 

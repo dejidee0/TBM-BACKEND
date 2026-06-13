@@ -5,6 +5,7 @@ namespace TBM.Core.Interfaces.Repositories;
 public interface ICartRepository
 {
     Task<Cart?> GetByUserIdAsync(Guid userId);
+    Task<Cart?> GetByGuestSessionIdAsync(string guestSessionId);
     Task<Cart?> GetByIdAsync(Guid id);
     Task<Cart> CreateAsync(Cart cart);
     Task UpdateAsync(Cart cart);

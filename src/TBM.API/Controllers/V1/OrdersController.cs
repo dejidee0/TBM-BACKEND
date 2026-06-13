@@ -12,8 +12,6 @@ namespace TBM.API.Controllers.V1;
 [ApiController]
 [Route("api/v1/orders")]
 [EnableRateLimiting("DynamicPolicy")]
-
-[Authorize]
 public class OrdersController : ControllerBase
 {
     private readonly IOrderService _orderService;
@@ -26,6 +24,7 @@ public class OrdersController : ControllerBase
     /// <summary>
     /// Get current user's orders
     /// </summary>
+    [Authorize]
     [HttpGet("my-orders")]
     public async Task<IActionResult> GetMyOrders()
     {
@@ -40,49 +39,11 @@ public class OrdersController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// Compatibility endpoint for frontend route: /api/orders/:orderId
-    /// </summary>
-    [ApiExplorerSettings(IgnoreApi = true)]
-    [HttpGet("~/api/orders/{orderId:guid}")]
-    public async Task<IActionResult> GetOrderCompatibility(Guid orderId)
-    {
-        AddCompatibilityDeprecationHeaders();
-
-        var userId = GetUserId();
-        var result = await _orderService.GetOrderByIdAsync(orderId, userId);
-
-        if (!result.Success)
-        {
-            return NotFound(result);
-        }
-
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Compatibility endpoint for frontend route: /api/orders
-    /// </summary>
-    [ApiExplorerSettings(IgnoreApi = true)]
-    [HttpGet("~/api/orders")]
-    public async Task<IActionResult> GetMyOrdersCompatibility()
-    {
-        AddCompatibilityDeprecationHeaders();
-
-        var userId = GetUserId();
-        var result = await _orderService.GetUserOrdersAsync(userId);
-
-        if (!result.Success)
-        {
-            return BadRequest(result);
-        }
-
-        return Ok(result);
-    }
     
     /// <summary>
     /// Get order by ID (user's own order)
     /// </summary>
+    [Authorize]
     [HttpGet("{orderId:guid}")]
     public async Task<IActionResult> GetOrder(Guid orderId)
     {
@@ -100,6 +61,7 @@ public class OrdersController : ControllerBase
     /// <summary>
     /// Get invoice URL for a user order
     /// </summary>
+    [Authorize]
     [HttpGet("{orderId:guid}/invoice")]
     public async Task<IActionResult> GetOrderInvoice(Guid orderId)
     {
@@ -129,19 +91,11 @@ public class OrdersController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Compatibility endpoint for frontend route: /api/orders/:orderId/invoice
-    /// </summary>
-    [ApiExplorerSettings(IgnoreApi = true)]
-    [HttpGet("~/api/orders/{orderId:guid}/invoice")]
-    public Task<IActionResult> GetOrderInvoiceCompatibility(Guid orderId)
-    {
-        return GetOrderInvoice(orderId);
-    }
 
     /// <summary>
     /// Get invoice data for a user order
     /// </summary>
+    [Authorize]
     [HttpGet("{orderId:guid}/invoice/document")]
     public async Task<IActionResult> GetInvoiceDocument(Guid orderId)
     {
@@ -203,6 +157,7 @@ public class OrdersController : ControllerBase
     /// <summary>
     /// Get order by order number
     /// </summary>
+    [Authorize]
     [HttpGet("number/{orderNumber}")]
     public async Task<IActionResult> GetOrderByNumber(string orderNumber)
     {
@@ -220,10 +175,12 @@ public class OrdersController : ControllerBase
     /// <summary>
     /// Create order from cart
     /// </summary>
+    [AllowAnonymous]
     [HttpPost]
     public async Task<IActionResult> CreateOrder([FromBody] CreateOrderDto dto)
     {
-        var userId = GetUserId();
+        var userId = GetUserIdOrNull();
+        dto.GuestSessionId ??= Request.Cookies["tbm_guest_id"];
         var result = await _orderService.CreateOrderAsync(userId, dto);
         
         if (!result.Success)
@@ -237,6 +194,7 @@ public class OrdersController : ControllerBase
     /// <summary>
     /// Cancel order (customer)
     /// </summary>
+    [Authorize]
     [HttpPost("{orderId}/cancel")]
     public async Task<IActionResult> CancelOrder(Guid orderId, [FromBody] CancelOrderDto dto)
     {
@@ -333,6 +291,17 @@ public class OrdersController : ControllerBase
         }
         
         return userId;
+    }
+
+    private Guid? GetUserIdOrNull()
+    {
+        if (User.Identity?.IsAuthenticated != true)
+        {
+            return null;
+        }
+
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(userIdClaim, out var userId) ? userId : null;
     }
 
     private void AddCompatibilityDeprecationHeaders()

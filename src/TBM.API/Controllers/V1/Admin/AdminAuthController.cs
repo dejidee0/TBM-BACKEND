@@ -7,7 +7,7 @@ using TBM.Application.Interfaces;
 using TBM.Core.Interfaces;
 
 [ApiController]
-[Route("api/admin/auth")]
+[Route("api/v1/admin/auth")]
 [EnableRateLimiting("DynamicPolicy")]
 
 public class AdminAuthController : ControllerBase

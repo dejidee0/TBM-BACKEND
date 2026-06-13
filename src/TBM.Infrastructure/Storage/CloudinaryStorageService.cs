@@ -32,7 +32,9 @@ namespace TBM.Infrastructure.Storage
                 Folder = $"{_settings.RoomFolder}/{userId}",
                 UseFilename = true,
                 UniqueFilename = true,
-                Overwrite = false
+                Overwrite = false,
+                // Convert HEIC/HEIF to JPEG so all browsers can display it
+                Format = IsHeicFile(fileName) ? "jpg" : null
             };
 
             var result = await _cloudinary.UploadAsync(uploadParams);
@@ -85,6 +87,50 @@ namespace TBM.Infrastructure.Storage
             return imageResult.SecureUrl.ToString();
         }
 
+        public async Task<string> UploadDocumentAsync(Stream stream, string fileName, string userId, string? contentType = null)
+        {
+            var uploadParams = new RawUploadParams
+            {
+                File = new FileDescription(fileName, stream),
+                Folder = $"{_settings.DocumentsFolder}/{userId}",
+                UseFilename = true,
+                UniqueFilename = true,
+                Overwrite = false
+            };
+
+            var result = await _cloudinary.UploadAsync(uploadParams);
+
+            if (result.Error != null)
+            {
+                throw new Exception(result.Error.Message);
+            }
+
+            return result.SecureUrl.ToString();
+        }
+
+        public async Task<string> UploadGalleryImageAsync(Stream stream, string fileName, string userId, string? contentType = null)
+        {
+            var uploadParams = new ImageUploadParams
+            {
+                File = new FileDescription(fileName, stream),
+                Folder = $"{_settings.GalleryFolder}/{userId}",
+                UseFilename = true,
+                UniqueFilename = true,
+                Overwrite = false,
+                // Convert HEIC/HEIF to JPEG so all browsers can display it
+                Format = IsHeicFile(fileName, contentType) ? "jpg" : null
+            };
+
+            var result = await _cloudinary.UploadAsync(uploadParams);
+
+            if (result.Error != null)
+            {
+                throw new Exception(result.Error.Message);
+            }
+
+            return result.SecureUrl.ToString();
+        }
+
         private static bool IsVideoContent(string fileName, string? contentType)
         {
             if (!string.IsNullOrWhiteSpace(contentType) &&
@@ -100,5 +146,24 @@ namespace TBM.Infrastructure.Storage
                    extension.Equals(".avi", StringComparison.OrdinalIgnoreCase) ||
                    extension.Equals(".mkv", StringComparison.OrdinalIgnoreCase);
         }
+
+        /// <summary>
+        /// Returns true for HEIC/HEIF files (common iPhone format).
+        /// Cloudinary accepts them but browsers other than Safari cannot display HEIC,
+        /// so we request conversion to JPEG on upload.
+        /// </summary>
+        private static bool IsHeicFile(string fileName, string? contentType = null)
+        {
+            if (!string.IsNullOrWhiteSpace(contentType))
+            {
+                var ct = contentType.ToLowerInvariant();
+                if (ct.Contains("heic") || ct.Contains("heif"))
+                    return true;
+            }
+
+            var ext = Path.GetExtension(fileName).ToLowerInvariant();
+            return ext is ".heic" or ".heif";
+        }
+
     }
 }

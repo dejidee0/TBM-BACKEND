@@ -14,7 +14,6 @@ public sealed class AuthorizationContractTests : IClassFixture<ApiContractFactor
     }
 
     [Theory]
-    [InlineData("POST", "api/v1/checkout/payment")]
     [InlineData("GET", "api/v1/checkout/payment/paystack/verify/{reference}")]
     [InlineData("GET", "api/v1/account/profile")]
     [InlineData("POST", "api/v1/cart/merge")]
@@ -35,6 +34,10 @@ public sealed class AuthorizationContractTests : IClassFixture<ApiContractFactor
     [InlineData("GET", "api/v1/public/projects")]
     [InlineData("POST", "api/v1/contact")]
     [InlineData("GET", "api/v1/auth/providers")]
+    [InlineData("GET", "api/v1/checkout")]
+    [InlineData("POST", "api/v1/checkout/validate-promo")]
+    [InlineData("POST", "api/v1/checkout/payment")]
+    [InlineData("POST", "api/v1/orders")]
     public void Public_Endpoints_Should_Be_AllowAnonymous(string method, string routePattern)
     {
         var endpoint = FindRouteEndpoint(method, routePattern);
@@ -47,7 +50,7 @@ public sealed class AuthorizationContractTests : IClassFixture<ApiContractFactor
     [Fact]
     public void Admin_Observability_Endpoint_Should_Require_Admin_Role()
     {
-        var endpoint = FindRouteEndpoint("GET", "api/admin/observability/slo/overview");
+        var endpoint = FindRouteEndpoint("GET", "api/v1/admin/observability/slo/overview");
         Assert.NotNull(endpoint);
 
         var authorize = endpoint!.Metadata

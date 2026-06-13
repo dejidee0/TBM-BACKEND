@@ -9,6 +9,8 @@ using TBM.Core.Entities.Audit;
 using TBM.Core.Interfaces;
 using TBM.Core.Interfaces.Repositories;
 using TBM.Core.Interfaces.Repositories.AI;
+using TBM.Core.Interfaces.Repositories.DesignFlow;
+using TBM.Core.Interfaces.Repositories.Subscriptions;
 
 namespace TBM.API.ContractTests;
 
@@ -179,8 +181,16 @@ public sealed class DesignVisibilityTests
         public IOrderRepository Orders => throw new NotImplementedException();
         public IOrderStatusHistoryRepository OrderStatusHistories => throw new NotImplementedException();
         public IWebhookEventRepository WebhookEvents => throw new NotImplementedException();
+        public IDesignSessionRepository DesignSessions => throw new NotImplementedException();
+        public IBillOfMaterialsRepository BillsOfMaterials => throw new NotImplementedException();
+        public IProjectRepository Projects => throw new NotImplementedException();
+        public ISubscriptionRepository Subscriptions => throw new NotImplementedException();
+        public IPricingConfigRepository PricingConfigs => throw new NotImplementedException();
+        public IDiscountRepository Discounts => throw new NotImplementedException();
+        public IPortfolioRepository Portfolio => throw new NotImplementedException();
 
         public Task<int> SaveChangesAsync() => Task.FromResult(1);
+        public void ClearChangeTracker() { }
         public Task BeginTransactionAsync() => Task.CompletedTask;
         public Task CommitTransactionAsync() => Task.CompletedTask;
         public Task RollbackTransactionAsync() => Task.CompletedTask;

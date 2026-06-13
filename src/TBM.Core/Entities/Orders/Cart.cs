@@ -4,7 +4,8 @@ namespace TBM.Core.Entities.Orders;
 
 public class Cart : AuditableEntity
 {
-    public Guid UserId { get; set; }
+    public Guid? UserId { get; set; }
+    public string? GuestSessionId { get; set; }
     public DateTime? ExpiresAt { get; set; }
     
     // Navigation properties

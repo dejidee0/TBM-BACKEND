@@ -25,6 +25,18 @@ public class CartRepository : ICartRepository
                     .ThenInclude(p => p.Category)
             .FirstOrDefaultAsync(c => c.UserId == userId);
     }
+
+    public async Task<Cart?> GetByGuestSessionIdAsync(string guestSessionId)
+    {
+        return await _context.Carts
+            .Include(c => c.Items)
+                .ThenInclude(i => i.Product)
+                    .ThenInclude(p => p.Images.OrderBy(img => img.DisplayOrder))
+            .Include(c => c.Items)
+                .ThenInclude(i => i.Product)
+                    .ThenInclude(p => p.Category)
+            .FirstOrDefaultAsync(c => c.GuestSessionId == guestSessionId);
+    }
     
     public async Task<Cart?> GetByIdAsync(Guid id)
     {
@@ -85,10 +97,8 @@ public class CartRepository : ICartRepository
     
     public async Task ClearCartAsync(Guid cartId)
     {
-        var items = await _context.CartItems
-            .Where(i => i.CartId == cartId)
-            .ToListAsync();
-        
-        _context.CartItems.RemoveRange(items);
+        await _context.Database.ExecuteSqlRawAsync(
+            "DELETE FROM CartItems WHERE CartId = {0}",
+            cartId);
     }
 }

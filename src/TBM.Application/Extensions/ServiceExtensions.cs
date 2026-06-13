@@ -2,6 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using TBM.Application.Helpers;
 using TBM.Application.Interfaces;
 using TBM.Application.Services;
+using TBM.Application.Services.DesignFlow;
+using TBM.Application.Services.Subscriptions;
 
 namespace TBM.Application.Extensions;
 
@@ -30,8 +32,18 @@ public static class ServiceExtensions
         services.AddScoped<RenovationEstimatorService>();
         services.AddScoped<AIPersonalAssistantService>();
         services.AddScoped<VendorDomainService>();
+        services.AddScoped<DesignSessionService>();
+        services.AddScoped<BOMGenerationService>();
+        services.AddScoped<ProjectService>();
+        services.AddScoped<ProjectTimelineService>();
+        services.AddScoped<PortfolioService>();
 
-        
+        // Subscription services
+        services.AddScoped<DiscountEngine>();
+        services.AddScoped<SubscriptionService>();
+        services.AddScoped<PricingConfigService>();
+        services.AddScoped<DiscountAdminService>();
+
         return services;
     }
 }

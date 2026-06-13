@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace TBM.API.Controllers.V1.Admin;
 
 [ApiController]
-[Route("api/admin/[controller]")]
+[Route("api/v1/admin/[controller]")]
 [Authorize(Roles = "SuperAdmin,Admin")]
 [EnableRateLimiting("DynamicPolicy")]
 

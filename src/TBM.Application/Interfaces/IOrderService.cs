@@ -10,7 +10,7 @@ public interface IOrderService
     Task<ApiResponse<OrderDto>> GetOrderByNumberAsync(string orderNumber, Guid? userId = null);
     Task<ApiResponse<PagedResultDto<OrderDto>>> GetOrdersAsync(OrderFilterDto filter);
     Task<ApiResponse<List<OrderDto>>> GetUserOrdersAsync(Guid userId);
-    Task<ApiResponse<OrderDto>> CreateOrderAsync(Guid userId, CreateOrderDto dto);
+    Task<ApiResponse<OrderDto>> CreateOrderAsync(Guid? userId, CreateOrderDto dto);
     Task<ApiResponse<OrderDto>> UpdateOrderStatusAsync(Guid orderId, UpdateOrderStatusDto dto);
     Task<ApiResponse<OrderDto>> UpdatePaymentStatusAsync(Guid orderId, UpdatePaymentStatusDto dto);
     Task<ApiResponse<bool>> CancelOrderAsync(Guid orderId, Guid userId, string reason);

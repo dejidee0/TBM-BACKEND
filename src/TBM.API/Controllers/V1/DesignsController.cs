@@ -29,7 +29,7 @@ public class DesignsController : ControllerBase
         _auditService = auditService;
     }
 
-    [HttpGet("~/api/designs")]
+    [HttpGet]
     public async Task<IActionResult> GetDesigns(
         [FromQuery] string? roomType = null,
         [FromQuery] string? search = null,
@@ -37,6 +37,8 @@ public class DesignsController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int limit = 10)
     {
+        try
+        {
         var userId = GetUserId();
         var projects = await _unitOfWork.AIProjects.GetByUserAsync(userId);
         var favorites = await GetFavoritesAsync(userId);
@@ -101,9 +103,26 @@ public class DesignsController : ControllerBase
                 hasMore = safePage < totalPages
             }
         });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            var logger = HttpContext.RequestServices.GetRequiredService<ILogger<DesignsController>>();
+            logger.LogError(ex, "GET /designs failed for user {User}", User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value);
+            return StatusCode(500, new
+            {
+                success = false,
+                message = "Failed to load designs. Please try again.",
+                error = $"{ex.GetType().Name}: {ex.Message}",
+                innerError = ex.InnerException?.Message
+            });
+        }
     }
 
-    [HttpGet("~/api/designs/{id:guid}")]
+    [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetDesignById(Guid id)
     {
         var userId = GetUserId();
@@ -131,7 +150,7 @@ public class DesignsController : ControllerBase
         });
     }
 
-    [HttpPost("~/api/designs/{id:guid}/favorite")]
+    [HttpPost("{id:guid}/favorite")]
     public async Task<IActionResult> ToggleFavorite(Guid id)
     {
         var userId = GetUserId();
@@ -160,7 +179,7 @@ public class DesignsController : ControllerBase
         return Ok(new { success = true, isFavorite });
     }
 
-    [HttpDelete("~/api/designs/{id:guid}")]
+    [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteDesign(Guid id)
     {
         var userId = GetUserId();
@@ -218,7 +237,7 @@ public class DesignsController : ControllerBase
         });
     }
 
-    [HttpGet("~/api/designs/{id:guid}/download")]
+    [HttpGet("{id:guid}/download")]
     public async Task<IActionResult> Download(Guid id, [FromQuery] string quality = "standard")
     {
         var userId = GetUserId();
@@ -235,7 +254,7 @@ public class DesignsController : ControllerBase
         return Ok(new { success = true, downloadUrl });
     }
 
-    [HttpPost("~/api/designs/{id:guid}/share")]
+    [HttpPost("{id:guid}/share")]
     public async Task<IActionResult> Share(Guid id)
     {
         var userId = GetUserId();
@@ -246,7 +265,7 @@ public class DesignsController : ControllerBase
         }
 
         var shareToken = Convert.ToHexString(Guid.NewGuid().ToByteArray()).ToLowerInvariant();
-        var shareUrl = $"{Request.Scheme}://{Request.Host}/api/designs/{id}/download?token={shareToken}";
+        var shareUrl = $"{Request.Scheme}://{Request.Host}/api/v1/designs/{id}/download?token={shareToken}";
 
         await _auditService.LogAsync("Design.Share", "DesignLibrary", null, new { userId, designId = id, shareToken });
         return Ok(new { success = true, shareUrl });

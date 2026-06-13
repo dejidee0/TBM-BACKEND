@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using TBM.Application.DTOs.Common;
 using TBM.Application.DTOs.Checkout;
 using TBM.Application.DTOs.Orders;
 using TBM.Application.Interfaces;
@@ -11,8 +12,6 @@ namespace TBM.API.Controllers.V1;
 [ApiController]
 [Route("api/v1/[controller]")]
 [EnableRateLimiting("DynamicPolicy")]
-
-[Authorize]
 public class CartController : ControllerBase
 {
     private readonly ICartService _cartService;
@@ -32,11 +31,11 @@ public class CartController : ControllerBase
     /// <summary>
     /// Get current user's cart
     /// </summary>
+    [AllowAnonymous]
     [HttpGet]
     public async Task<IActionResult> GetCart()
     {
-        var userId = GetUserId();
-        var result = await _cartService.GetCartAsync(userId);
+        var result = await GetCurrentCartAsync();
         
         if (!result.Success)
         {
@@ -49,11 +48,11 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart
     /// </summary>
+    [AllowAnonymous]
     [HttpGet("api/cart")]
     public async Task<IActionResult> GetCartCompatibility()
     {
-        var userId = GetUserId();
-        var result = await _cartService.GetCartAsync(userId);
+        var result = await GetCurrentCartAsync();
 
         if (!result.Success || result.Data == null)
         {
@@ -75,11 +74,11 @@ public class CartController : ControllerBase
     /// <summary>
     /// Add item to cart
     /// </summary>
+    [AllowAnonymous]
     [HttpPost("items")]
     public async Task<IActionResult> AddToCart([FromBody] AddToCartDto dto)
     {
-        var userId = GetUserId();
-        var result = await _cartService.AddToCartAsync(userId, dto);
+        var result = await AddToCurrentCartAsync(dto);
         
         if (!result.Success)
         {
@@ -92,11 +91,11 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart/add
     /// </summary>
+    [AllowAnonymous]
     [HttpPost("api/cart/add")]
     public async Task<IActionResult> AddToCartCompatibility([FromBody] AddToCartDto dto)
     {
-        var userId = GetUserId();
-        var result = await _cartService.AddToCartAsync(userId, dto);
+        var result = await AddToCurrentCartAsync(dto);
 
         if (!result.Success || result.Data == null)
         {
@@ -119,11 +118,11 @@ public class CartController : ControllerBase
     /// <summary>
     /// Update cart item quantity
     /// </summary>
+    [AllowAnonymous]
     [HttpPut("items/{itemId}")]
     public async Task<IActionResult> UpdateCartItem(Guid itemId, [FromBody] UpdateCartItemDto dto)
     {
-        var userId = GetUserId();
-        var result = await _cartService.UpdateCartItemAsync(userId, itemId, dto);
+        var result = await UpdateCurrentCartItemAsync(itemId, dto);
         
         if (!result.Success)
         {
@@ -136,11 +135,11 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart/items/:itemId
     /// </summary>
+    [AllowAnonymous]
     [HttpPut("api/cart/items/{itemId:guid}")]
     public async Task<IActionResult> UpdateCartItemCompatibility(Guid itemId, [FromBody] UpdateCartItemDto dto)
     {
-        var userId = GetUserId();
-        var result = await _cartService.UpdateCartItemAsync(userId, itemId, dto);
+        var result = await UpdateCurrentCartItemAsync(itemId, dto);
 
         if (!result.Success || result.Data == null)
         {
@@ -159,11 +158,11 @@ public class CartController : ControllerBase
     /// <summary>
     /// Remove item from cart
     /// </summary>
+    [AllowAnonymous]
     [HttpDelete("items/{itemId}")]
     public async Task<IActionResult> RemoveCartItem(Guid itemId)
     {
-        var userId = GetUserId();
-        var result = await _cartService.RemoveCartItemAsync(userId, itemId);
+        var result = await RemoveCurrentCartItemAsync(itemId);
         
         if (!result.Success)
         {
@@ -176,11 +175,11 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart/items/:itemId
     /// </summary>
+    [AllowAnonymous]
     [HttpDelete("api/cart/items/{itemId:guid}")]
     public async Task<IActionResult> RemoveCartItemCompatibility(Guid itemId)
     {
-        var userId = GetUserId();
-        var result = await _cartService.RemoveCartItemAsync(userId, itemId);
+        var result = await RemoveCurrentCartItemAsync(itemId);
 
         if (!result.Success)
         {
@@ -193,11 +192,11 @@ public class CartController : ControllerBase
     /// <summary>
     /// Clear all items from cart
     /// </summary>
+    [AllowAnonymous]
     [HttpDelete]
     public async Task<IActionResult> ClearCart()
     {
-        var userId = GetUserId();
-        var result = await _cartService.ClearCartAsync(userId);
+        var result = await ClearCurrentCartAsync();
         
         if (!result.Success)
         {
@@ -210,6 +209,7 @@ public class CartController : ControllerBase
     /// <summary>
     /// Merge guest cart items into authenticated user's persistent cart
     /// </summary>
+    [Authorize]
     [HttpPost("merge")]
     public async Task<IActionResult> MergeCart([FromBody] MergeCartRequestDto dto)
     {
@@ -232,7 +232,7 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart/merge
     /// </summary>
-    [HttpPost("~/api/cart/merge")]
+    [HttpPost("~/api/v1/cart/merge")]
     public Task<IActionResult> MergeCartCompatibility([FromBody] MergeCartRequestDto dto)
     {
         return MergeCart(dto);
@@ -241,7 +241,8 @@ public class CartController : ControllerBase
     /// <summary>
     /// Apply promo code to current cart
     /// </summary>
-    [HttpPost("~/api/cart/apply-promo")]
+    [Authorize]
+    [HttpPost("apply-promo")]
     public async Task<IActionResult> ApplyPromo([FromBody] PromoValidationRequestDto dto)
     {
         var userId = GetUserId();
@@ -269,11 +270,11 @@ public class CartController : ControllerBase
     /// <summary>
     /// Get related products based on items currently in cart
     /// </summary>
-    [HttpGet("api/cart/related")]
+    [AllowAnonymous]
+    [HttpGet("related")]
     public async Task<IActionResult> GetCartRelated([FromQuery] int limit = 4)
     {
-        var userId = GetUserId();
-        var cartResult = await _cartService.GetCartAsync(userId);
+        var cartResult = await GetCurrentCartAsync();
 
         if (!cartResult.Success || cartResult.Data == null)
         {
@@ -302,6 +303,74 @@ public class CartController : ControllerBase
         return Ok(payload);
     }
     
+    private async Task<ApiResponse<CartDto>> GetCurrentCartAsync()
+    {
+        var userId = GetUserIdOrNull();
+        return userId.HasValue
+            ? await _cartService.GetCartAsync(userId.Value)
+            : await _cartService.GetGuestCartAsync(GetGuestSessionId()!);
+    }
+
+    private async Task<ApiResponse<CartDto>> AddToCurrentCartAsync(AddToCartDto dto)
+    {
+        var userId = GetUserIdOrNull();
+        return userId.HasValue
+            ? await _cartService.AddToCartAsync(userId.Value, dto)
+            : await _cartService.AddToGuestCartAsync(GetGuestSessionId()!, dto);
+    }
+
+    private async Task<ApiResponse<CartDto>> UpdateCurrentCartItemAsync(Guid itemId, UpdateCartItemDto dto)
+    {
+        var userId = GetUserIdOrNull();
+        return userId.HasValue
+            ? await _cartService.UpdateCartItemAsync(userId.Value, itemId, dto)
+            : await _cartService.UpdateGuestCartItemAsync(GetGuestSessionId()!, itemId, dto.Quantity);
+    }
+
+    private async Task<ApiResponse<bool>> RemoveCurrentCartItemAsync(Guid itemId)
+    {
+        var userId = GetUserIdOrNull();
+        return userId.HasValue
+            ? await _cartService.RemoveCartItemAsync(userId.Value, itemId)
+            : await _cartService.RemoveGuestCartItemAsync(GetGuestSessionId()!, itemId);
+    }
+
+    private async Task<ApiResponse<bool>> ClearCurrentCartAsync()
+    {
+        var userId = GetUserIdOrNull();
+        return userId.HasValue
+            ? await _cartService.ClearCartAsync(userId.Value)
+            : await _cartService.ClearGuestCartAsync(GetGuestSessionId()!);
+    }
+
+    private string? GetGuestSessionId()
+    {
+        var existing = Request.Cookies["tbm_guest_id"];
+        if (!string.IsNullOrEmpty(existing)) return existing;
+
+        var newId = Guid.NewGuid().ToString();
+        Response.Cookies.Append("tbm_guest_id", newId, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Lax,
+            Expires = DateTimeOffset.UtcNow.AddDays(30)
+        });
+
+        return newId;
+    }
+
+    private Guid? GetUserIdOrNull()
+    {
+        if (User.Identity?.IsAuthenticated != true)
+        {
+            return null;
+        }
+
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(userIdClaim, out var userId) ? userId : null;
+    }
+
     private Guid GetUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

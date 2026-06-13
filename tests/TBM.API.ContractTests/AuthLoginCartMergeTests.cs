@@ -1,16 +1,22 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using TBM.Application.Configuration;
 using TBM.Application.DTOs.Auth;
 using TBM.Application.DTOs.Common;
 using TBM.Application.DTOs.Orders;
 using TBM.Application.Helpers;
 using TBM.Application.Interfaces;
 using TBM.Application.Services;
+using TBM.Application.Services.Subscriptions;
+using TBM.Core.Entities.Subscriptions;
 using TBM.Core.Entities.Users;
 using TBM.Core.Enums;
 using TBM.Core.Interfaces;
 using TBM.Core.Interfaces.Repositories;
 using TBM.Core.Interfaces.Repositories.AI;
+using TBM.Core.Interfaces.Repositories.DesignFlow;
+using TBM.Core.Interfaces.Repositories.Subscriptions;
 using TBM.Core.Interfaces.Services;
 
 namespace TBM.API.ContractTests;
@@ -129,17 +135,27 @@ public sealed class AuthLoginCartMergeTests
 
     private static AuthService BuildAuthService(User user, StubCartService cartService)
     {
-        var jwtHelper = new JwtHelper(Options.Create(new JwtSettings
+        var jwtOptions = Options.Create(new JwtSettings
         {
             SecretKey = "test-secret-key-with-at-least-32-characters",
             Issuer = "TBM.Tests",
             Audience = "TBM.Tests",
             ExpiryMinutes = 15,
             RefreshTokenExpiryDays = 7
-        }));
-
+        });
+        var jwtHelper = new JwtHelper(jwtOptions);
         var unitOfWork = new AuthLoginTestUnitOfWork(new StubUserRepository(user));
-        return new AuthService(unitOfWork, jwtHelper, new StubEmailService(), cartService, NullLogger<AuthService>.Instance);
+
+        var discountEngine = new DiscountEngine(unitOfWork, NullLogger<DiscountEngine>.Instance);
+        var paystackService = new PaystackService(new HttpClient(), new ConfigurationBuilder().Build(), NullLogger<PaystackService>.Instance);
+        var subscriptionService = new SubscriptionService(
+            unitOfWork,
+            paystackService,
+            discountEngine,
+            NullLogger<SubscriptionService>.Instance,
+            Options.Create(new AppSettings()));
+
+        return new AuthService(unitOfWork, jwtHelper, jwtOptions, new StubEmailService(), cartService, subscriptionService, NullLogger<AuthService>.Instance);
     }
 
     private static User BuildUser(string email, string password)
@@ -220,9 +236,14 @@ public sealed class AuthLoginCartMergeTests
         }
 
         public Task<ApiResponse<CartDto>> AddToCartAsync(Guid userId, AddToCartDto dto) => throw new NotImplementedException();
+        public Task<ApiResponse<CartDto>> GetGuestCartAsync(string guestSessionId) => throw new NotImplementedException();
+        public Task<ApiResponse<CartDto>> AddToGuestCartAsync(string guestSessionId, AddToCartDto dto) => throw new NotImplementedException();
         public Task<ApiResponse<CartDto>> UpdateCartItemAsync(Guid userId, Guid itemId, UpdateCartItemDto dto) => throw new NotImplementedException();
+        public Task<ApiResponse<CartDto>> UpdateGuestCartItemAsync(string guestSessionId, Guid itemId, int quantity) => throw new NotImplementedException();
         public Task<ApiResponse<bool>> RemoveCartItemAsync(Guid userId, Guid itemId) => throw new NotImplementedException();
+        public Task<ApiResponse<bool>> RemoveGuestCartItemAsync(string guestSessionId, Guid itemId) => throw new NotImplementedException();
         public Task<ApiResponse<bool>> ClearCartAsync(Guid userId) => throw new NotImplementedException();
+        public Task<ApiResponse<bool>> ClearGuestCartAsync(string guestSessionId) => throw new NotImplementedException();
 
         public Task<ApiResponse<MergeCartResultDto>> MergeGuestCartAsync(Guid userId, MergeCartRequestDto dto)
         {
@@ -291,13 +312,31 @@ public sealed class AuthLoginCartMergeTests
         public IOrderRepository Orders => throw new NotImplementedException();
         public IOrderStatusHistoryRepository OrderStatusHistories => throw new NotImplementedException();
         public IWebhookEventRepository WebhookEvents => throw new NotImplementedException();
+        public IDesignSessionRepository DesignSessions => throw new NotImplementedException();
+        public IBillOfMaterialsRepository BillsOfMaterials => throw new NotImplementedException();
+        public IProjectRepository Projects => throw new NotImplementedException();
+        public ISubscriptionRepository Subscriptions { get; } = new StubSubscriptionRepository();
+        public IPricingConfigRepository PricingConfigs => throw new NotImplementedException();
+        public IDiscountRepository Discounts => throw new NotImplementedException();
+        public IPortfolioRepository Portfolio => throw new NotImplementedException();
 
         public Task<int> SaveChangesAsync() => Task.FromResult(1);
+        public void ClearChangeTracker() { }
         public Task BeginTransactionAsync() => Task.CompletedTask;
         public Task CommitTransactionAsync() => Task.CompletedTask;
         public Task RollbackTransactionAsync() => Task.CompletedTask;
         public Task ExecuteInTransactionAsync(Func<Task> operation) => operation();
         public Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> operation) => operation();
         public void Dispose() { }
+    }
+
+    private sealed class StubSubscriptionRepository : ISubscriptionRepository
+    {
+        public Task<Subscription?> GetActiveByUserIdAsync(Guid userId) => Task.FromResult<Subscription?>(null);
+        public Task<Subscription?> GetByIdAsync(Guid id) => Task.FromResult<Subscription?>(null);
+        public Task<List<Subscription>> GetByUserIdAsync(Guid userId) => Task.FromResult(new List<Subscription>());
+        public Task<List<Subscription>> GetExpiringBeforeAsync(DateTime cutoff) => Task.FromResult(new List<Subscription>());
+        public Task CreateAsync(Subscription subscription) => Task.CompletedTask;
+        public Task UpdateAsync(Subscription subscription) => Task.CompletedTask;
     }
 }

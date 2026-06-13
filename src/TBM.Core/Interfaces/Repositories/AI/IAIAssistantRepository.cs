@@ -15,4 +15,5 @@ public interface IAIAssistantRepository
     Task<AIAssistantTask?> GetTaskAsync(Guid taskId, Guid userId);
     Task<AIAssistantToolAction?> GetToolActionAsync(Guid actionId, Guid userId);
     Task<AIAssistantToolApproval?> GetLatestApprovalAsync(Guid actionId, Guid userId);
+    Task<bool> DeleteSessionAsync(Guid sessionId, Guid userId);
 }

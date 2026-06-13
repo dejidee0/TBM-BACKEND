@@ -1,5 +1,6 @@
 using System.Text;
 using TBM.Application.DTOs.Admin;
+using TBM.Application.Helpers;
 using TBM.Core.Enums;
 using TBM.Core.Interfaces;
 
@@ -43,14 +44,68 @@ public class AdminFinancialService
     {
         months = Math.Clamp(months, 1, 24);
         var data = await _unitOfWork.Orders.GetMonthlyRevenueAsync(months);
-        return new AdminFinancialMonthlyRevenueDto { Data = data };
+
+        var now = DateTime.UtcNow;
+        var endMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var startMonth = endMonth.AddMonths(-(months - 1));
+
+        var lookup = data.ToDictionary(x => (x.Year, x.Month), x => x.Revenue);
+        var filled = DateRangeHelper.GetMonthStartsUtc(startMonth, endMonth)
+            .Select(m => new TBM.Core.DTOs.Admin.MonthlyRevenueDto
+            {
+                Year = m.Year,
+                Month = m.Month,
+                Revenue = lookup.TryGetValue((m.Year, m.Month), out var revenue) ? revenue : 0m
+            })
+            .ToList();
+
+        return new AdminFinancialMonthlyRevenueDto { Data = filled };
     }
 
     public async Task<List<TBM.Core.DTOs.Admin.RevenueByServiceDto>> GetRevenueByServiceAsync(
         string? dateRange = null)
     {
         var fromUtc = ResolveFromUtc(dateRange);
-        return await _unitOfWork.Orders.GetRevenueByServiceAsync(fromUtc, null);
+        var rows = await _unitOfWork.Orders.GetRevenueByServiceAsync(fromUtc, null);
+        var enumNames = Enum.GetNames(typeof(ProductType));
+        var enumSet = new HashSet<string>(enumNames, StringComparer.OrdinalIgnoreCase);
+        var map = rows.ToDictionary(x => x.Service, StringComparer.OrdinalIgnoreCase);
+
+        var merged = new List<TBM.Core.DTOs.Admin.RevenueByServiceDto>();
+        foreach (var name in enumNames)
+        {
+            if (map.TryGetValue(name, out var row))
+            {
+                merged.Add(new TBM.Core.DTOs.Admin.RevenueByServiceDto
+                {
+                    Service = string.IsNullOrWhiteSpace(row.Service) ? name : row.Service,
+                    Revenue = row.Revenue,
+                    Orders = row.Orders
+                });
+            }
+            else
+            {
+                merged.Add(new TBM.Core.DTOs.Admin.RevenueByServiceDto
+                {
+                    Service = name,
+                    Revenue = 0m,
+                    Orders = 0
+                });
+            }
+        }
+
+        foreach (var row in rows)
+        {
+            if (!enumSet.Contains(row.Service))
+            {
+                merged.Add(row);
+            }
+        }
+
+        return merged
+            .OrderByDescending(x => x.Revenue)
+            .ThenBy(x => x.Service)
+            .ToList();
     }
 
     public async Task<AdminFinancialTransactionListDto> GetTransactionsAsync(
@@ -79,8 +134,9 @@ public class AdminFinancialService
             Id = o.Id,
             OrderNumber = o.OrderNumber,
             UserId = o.UserId,
-            CustomerName = $"{o.User.FirstName} {o.User.LastName}".Trim(),
-            CustomerEmail = o.User.Email,
+            IsGuestOrder = o.IsGuestOrder,
+            CustomerName = o.User == null ? o.ShippingFullName : $"{o.User.FirstName} {o.User.LastName}".Trim(),
+            CustomerEmail = o.User?.Email ?? o.GuestEmail ?? string.Empty,
             Amount = o.Total,
             PaymentStatus = o.PaymentStatus.ToString(),
             PaymentMethod = o.PaymentMethod?.ToString(),

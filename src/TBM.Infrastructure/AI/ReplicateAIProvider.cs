@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -14,6 +15,13 @@ namespace TBM.Infrastructure.AI
         private readonly HttpClient _http;
         private readonly ReplicateSettings _settings;
 
+        // Cached routing decision per model (resolved once per process lifetime).
+        // UseVersionEndpoint = true  → POST /v1/predictions          with {"version":"…","input":{…}}
+        // UseVersionEndpoint = false → POST /v1/models/{path}/predictions with {"input":{…}}
+        private record ResolvedEndpoint(bool UseVersionEndpoint, string? Version);
+        private static readonly ConcurrentDictionary<string, ResolvedEndpoint> _endpointCache = new();
+        private static readonly SemaphoreSlim _resolveLock = new(1, 1);
+
         public string ProviderName => "Replicate";
 
         public ReplicateAIProvider(
@@ -22,240 +30,304 @@ namespace TBM.Infrastructure.AI
         {
             _http = http;
             _settings = options.Value;
-            
+
             if (string.IsNullOrWhiteSpace(_settings.ApiKey))
-            {
-                throw new Exception("❌ Replicate API key is NULL or EMPTY at runtime");
-            }
-            
-            // ✅ CRITICAL: Replicate API uses "Token" not "Bearer"
+                throw new Exception("Replicate API key is NULL or EMPTY at runtime");
+
             _http.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Token", _settings.ApiKey);
         }
 
+        // ── IMAGE GENERATION ─────────────────────────────────────────────────────
+
         public async Task<AIProviderResult> GenerateImageAsync(AIImageRequest request)
-{
-    // ✅ DETECT: img2img vs txt2img based on ImageUrl presence
-    var isImg2Img = !string.IsNullOrWhiteSpace(request.ImageUrl);
-    
-    Console.WriteLine($"[Replicate] Mode: {(isImg2Img ? "IMG2IMG" : "TXT2IMG")}");
-    
-    object payload;
-    
-    if (isImg2Img)
-    {
-        // ✅ IMG2IMG: Transform existing image
-        payload = new
         {
-            version = "39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
-            input = new
-            {
-                image = request.ImageUrl, // ✅ Source image
-                prompt = request.Prompt,
-                negative_prompt = request.NegativePrompt ?? "blurry, low quality, distorted, deformed",
-                num_outputs = 1,
-                num_inference_steps = 30,
-                guidance_scale = 7.5,
-                prompt_strength = 0.8, // ✅ How much to transform (0.0-1.0)
-                scheduler = "K_EULER"
-            }
-        };
-    }
-    else
-    {
-        // ✅ TXT2IMG: Generate from scratch
-        payload = new
-        {
-            version = "39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
-            input = new
-            {
-                prompt = request.Prompt,
-                negative_prompt = request.NegativePrompt ?? "blurry, low quality, distorted, deformed",
-                num_outputs = 1,
-                width = request.Width,
-                height = request.Height,
-                num_inference_steps = 30,
-                guidance_scale = 7.5
-            }
-        };
-    }
+            var isImg2Img = !string.IsNullOrWhiteSpace(request.ImageUrl);
+            Console.WriteLine($"[Replicate] Image mode: {(isImg2Img ? "IMG2IMG" : "TXT2IMG")}");
 
-    var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions 
-    { 
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true
-    });
+            // Model: adirik/interior-design (community model → version-hash endpoint)
+            // Fine-tuned specifically on room transformation datasets.
+            // Superior prompt adherence for furniture, materials, lighting and
+            // colour palette compared to general-purpose models (flux-dev / SDXL).
+            // Keeps architectural structure stable while replacing decor.
+            var endpoint = await ResolveEndpointAsync(_settings.ImageModel);
 
-    Console.WriteLine($"[Replicate] Sending: {jsonPayload}");
+            var designPrompt =
+                $"A completely redesigned and redecorated interior. {request.Prompt}. " +
+                "Photorealistic, high-end interior design, professional architectural photography, 4K.";
 
-    var response = await _http.PostAsync(
-        "https://api.replicate.com/v1/predictions",
-        new StringContent(jsonPayload, Encoding.UTF8, "application/json")
-    );
-
-    var rawResponse = await response.Content.ReadAsStringAsync();
-    Console.WriteLine($"[Replicate] Status: {response.StatusCode}");
-    Console.WriteLine($"[Replicate] Response: {rawResponse}");
-
-    if (!response.IsSuccessStatusCode)
-    {
-        throw new HttpRequestException(
-            $"Replicate API returned {response.StatusCode}: {rawResponse}");
-    }
-
-    var prediction = JsonSerializer.Deserialize<ReplicatePredictionResponse>(rawResponse)!;
-    
-    return await PollPredictionAsync(prediction.Id);
-}
-
-
-
-     private async Task<AIProviderResult> PollPredictionAsync(string predictionId, int maxAttempts = 60)
-{
-    var attempts = 0;
-
-    Console.WriteLine($"[Replicate] Polling prediction: {predictionId}");
-    Console.WriteLine($"[Replicate] Max wait time: {maxAttempts * 2} seconds");
-
-    while (attempts < maxAttempts)
-    {
-        await Task.Delay(2000);
-        attempts++;
-
-        var response = await _http.GetAsync(
-            $"https://api.replicate.com/v1/predictions/{predictionId}");
-        
-        response.EnsureSuccessStatusCode();
-        
-        var rawResponse = await response.Content.ReadAsStringAsync();
-        var prediction = JsonSerializer.Deserialize<ReplicatePredictionResponse>(rawResponse)!;
-
-        Console.WriteLine($"[Replicate] Poll #{attempts}/{maxAttempts}: Status={prediction.Status}");
-
-        if (prediction.Status == "succeeded")
-        {
-            // ✅ Handle both string (video) and array (image) outputs
-            string outputUrl = string.Empty;
-            
-            if (prediction.Output != null)
-            {
-                var outputElement = (JsonElement)prediction.Output;
-                
-                if (outputElement.ValueKind == JsonValueKind.String)
+            // adirik/interior-design schema:
+            //   image              – source room URL (img2img)
+            //   prompt             – design description
+            //   negative_prompt    – what to avoid
+            //   guidance_scale     – 1–20 (15 = strong prompt adherence)
+            //   num_inference_steps– 20–50 (50 = best quality)
+            //   strength           – 0–1 (0.99 = 99 % transformation → clearly different output)
+            object input = isImg2Img
+                ? new
                 {
-                    // Video output - single string URL
-                    outputUrl = outputElement.GetString() ?? string.Empty;
+                    image = request.ImageUrl,
+                    prompt = designPrompt,
+                    negative_prompt = request.NegativePrompt
+                        ?? "ugly, deformed, noisy, blurry, low quality, distorted, "
+                         + "unrealistic, cartoon, illustration, painting, sketch",
+                    guidance_scale = 15,
+                    num_inference_steps = 50,
+                    strength = 0.99
                 }
-                else if (outputElement.ValueKind == JsonValueKind.Array)
+                : (object)new
                 {
-                    // Image output - array of URLs
-                    outputUrl = outputElement.EnumerateArray().FirstOrDefault().GetString() ?? string.Empty;
-                }
-            }
-            
-            Console.WriteLine($"[Replicate] ✅ Success! Output: {outputUrl}");
-            
-            return new AIProviderResult
-            {
-                Success = true,
-                OutputUrl = outputUrl,
-                Cost = 0.05m,
-                RawResponse = rawResponse,
-                ProviderJobId = predictionId
-            };
+                    prompt = designPrompt,
+                    negative_prompt = request.NegativePrompt
+                        ?? "ugly, deformed, noisy, blurry, low quality, distorted, "
+                         + "unrealistic, cartoon, illustration, painting, sketch",
+                    guidance_scale = 15,
+                    num_inference_steps = 50
+                };
+
+            return await SubmitAndPollAsync(endpoint, input);
         }
 
-        if (prediction.Status == "failed" || prediction.Status == "canceled")
+        // ── VIDEO GENERATION ─────────────────────────────────────────────────────
+
+        public async Task<AIProviderResult> GenerateVideoAsync(AIVideoRequest request)
         {
-            var error = prediction.Error ?? "Unknown error";
-            Console.WriteLine($"[Replicate] ❌ Failed: {error}");
-            
-            return new AIProviderResult
+            Console.WriteLine($"[Replicate] Video generation started");
+            Console.WriteLine($"[Replicate] Prompt  : {request.Prompt}");
+            Console.WriteLine($"[Replicate] Image   : {request.ImageUrl ?? "None (text-to-video)"}");
+
+            var hasImage = !string.IsNullOrWhiteSpace(request.ImageUrl);
+
+            // Model: kwaivgi/kling-v1.6-standard (officially deployed → model-path endpoint)
+            // 720p @ 30fps, 5 or 10 second clips.
+            // Best-in-class human body motion — ideal for showing workers doing physical tasks.
+            // Parameters: start_image (first frame), duration (5|10), cfg_scale (0–1), negative_prompt.
+            var endpoint = await ResolveEndpointAsync(_settings.VideoModel);
+
+            // User's prompt drives the content. We wrap it with a narrative arc:
+            // construction/renovation work IN PROGRESS → ending with the beautiful finished result revealed.
+            var enrichedPrompt =
+                $"{request.Prompt}. " +
+                "Workers actively doing the renovation work. " +
+                "The video ends with the completed transformation — a beautifully finished interior revealed. " +
+                "Cinematic camera angles, smooth motion, photorealistic, high quality, 4K.";
+
+            // cfg_scale 0.7 = strong prompt adherence while keeping natural motion.
+            // duration 10 = maximum clip length for richer content.
+            object input = hasImage
+                ? new
+                {
+                    prompt = enrichedPrompt,
+                    start_image = request.ImageUrl,
+                    duration = 10,
+                    cfg_scale = 0.7,
+                    negative_prompt = "blurry, low quality, static, no motion, frozen, duplicate, watermark"
+                }
+                : (object)new
+                {
+                    prompt = enrichedPrompt,
+                    duration = 10,
+                    cfg_scale = 0.7,
+                    aspect_ratio = "16:9",
+                    negative_prompt = "blurry, low quality, static, no motion, frozen, duplicate, watermark"
+                };
+
+            // Kling v1.6 typically takes 3–4 minutes. 300 × 2s = 10 min max.
+            return await SubmitAndPollAsync(endpoint, input, maxAttempts: 300);
+        }
+
+        // ── ENDPOINT RESOLUTION ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Determines the correct Replicate API endpoint for <paramref name="modelPath"/>:
+        /// <list type="bullet">
+        ///   <item>Community models (e.g. adirik/interior-design) expose a versions list →
+        ///         use the version-hash endpoint so they never return 404.</item>
+        ///   <item>Officially deployed models (e.g. minimax/video-01) return 404 on the
+        ///         versions endpoint → use the model-path endpoint instead.</item>
+        /// </list>
+        /// The result is cached permanently per model so this lookup runs only once.
+        /// </summary>
+        private async Task<ResolvedEndpoint> ResolveEndpointAsync(string modelPath)
+        {
+            if (_endpointCache.TryGetValue(modelPath, out var cached))
+                return cached;
+
+            await _resolveLock.WaitAsync();
+            try
             {
-                Success = false,
-                OutputUrl = string.Empty,
-                Cost = 0m,
-                RawResponse = rawResponse,
-                ProviderJobId = predictionId,
-                ErrorMessage = error
+                if (_endpointCache.TryGetValue(modelPath, out cached))
+                    return cached;
+
+                Console.WriteLine($"[Replicate] Resolving endpoint for: {modelPath}");
+
+                var versionsResponse = await _http.GetAsync(
+                    $"https://api.replicate.com/v1/models/{modelPath}/versions");
+
+                ResolvedEndpoint resolved;
+
+                if (versionsResponse.IsSuccessStatusCode)
+                {
+                    // Community model — parse the latest version hash
+                    var rawJson = await versionsResponse.Content.ReadAsStringAsync();
+                    using var doc = JsonDocument.Parse(rawJson);
+                    var first = doc.RootElement
+                        .GetProperty("results")
+                        .EnumerateArray()
+                        .FirstOrDefault();
+
+                    if (first.ValueKind == JsonValueKind.Undefined)
+                        throw new InvalidOperationException(
+                            $"No versions found for model '{modelPath}'.");
+
+                    var versionHash = first.GetProperty("id").GetString()
+                        ?? throw new InvalidOperationException(
+                            $"Version ID was null for model '{modelPath}'.");
+
+                    resolved = new ResolvedEndpoint(UseVersionEndpoint: true, Version: versionHash);
+                    Console.WriteLine($"[Replicate] {modelPath} → version-hash endpoint ({versionHash[..12]}…)");
+                }
+                else
+                {
+                    // Officially deployed model — use the model-path endpoint
+                    resolved = new ResolvedEndpoint(UseVersionEndpoint: false, Version: null);
+                    Console.WriteLine($"[Replicate] {modelPath} → model-path endpoint");
+                }
+
+                _endpointCache[modelPath] = resolved;
+                return resolved;
+            }
+            finally
+            {
+                _resolveLock.Release();
+            }
+        }
+
+        // ── PREDICTION SUBMIT + POLL ──────────────────────────────────────────────
+
+        private async Task<AIProviderResult> SubmitAndPollAsync(
+            ResolvedEndpoint endpoint,
+            object input,
+            int maxAttempts = 60)
+        {
+            string apiUrl;
+            object payload;
+
+            if (endpoint.UseVersionEndpoint)
+            {
+                // Version-hash endpoint: POST /v1/predictions
+                // Works for all models (community + official).
+                apiUrl = "https://api.replicate.com/v1/predictions";
+                payload = new { version = endpoint.Version, input };
+            }
+            else
+            {
+                // Model-path endpoint: POST /v1/models/{owner}/{model}/predictions
+                // Used for officially deployed models that don't expose versions.
+                // Determine the model path from the cached entry's absence of a version.
+                // We need the model path — extract it by reverse-looking in the cache.
+                var modelPath = _endpointCache
+                    .FirstOrDefault(kv => kv.Value == endpoint)
+                    .Key;
+                apiUrl = $"https://api.replicate.com/v1/models/{modelPath}/predictions";
+                payload = new { input };
+            }
+
+            var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                WriteIndented = false
+            });
+
+            Console.WriteLine($"[Replicate] POST {apiUrl}");
+
+            var response = await _http.PostAsync(
+                apiUrl,
+                new StringContent(jsonPayload, Encoding.UTF8, "application/json"));
+
+            var rawResponse = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"[Replicate] Submit: {response.StatusCode}");
+
+            if (!response.IsSuccessStatusCode)
+                throw new HttpRequestException(
+                    $"Replicate API returned {response.StatusCode}: {rawResponse}");
+
+            var prediction = JsonSerializer.Deserialize<ReplicatePredictionResponse>(rawResponse)!;
+            return await PollPredictionAsync(prediction.Id, maxAttempts);
+        }
+
+        private async Task<AIProviderResult> PollPredictionAsync(
+            string predictionId,
+            int maxAttempts)
+        {
+            Console.WriteLine($"[Replicate] Polling: {predictionId} (max {maxAttempts * 2}s)");
+
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                await Task.Delay(2000);
+
+                var response = await _http.GetAsync(
+                    $"https://api.replicate.com/v1/predictions/{predictionId}");
+
+                response.EnsureSuccessStatusCode();
+
+                var rawResponse = await response.Content.ReadAsStringAsync();
+                var prediction = JsonSerializer.Deserialize<ReplicatePredictionResponse>(rawResponse)!;
+
+                Console.WriteLine($"[Replicate] Poll {attempt}/{maxAttempts}: {prediction.Status}");
+
+                if (prediction.Status == "succeeded")
+                {
+                    var outputUrl = ExtractOutputUrl(prediction.Output);
+                    Console.WriteLine($"[Replicate] Success. Output: {outputUrl}");
+
+                    return new AIProviderResult
+                    {
+                        Success = true,
+                        OutputUrl = outputUrl,
+                        Cost = 0.05m,
+                        RawResponse = rawResponse,
+                        ProviderJobId = predictionId
+                    };
+                }
+
+                if (prediction.Status is "failed" or "canceled")
+                {
+                    var error = prediction.Error ?? "Unknown error";
+                    Console.WriteLine($"[Replicate] Failed: {error}");
+
+                    return new AIProviderResult
+                    {
+                        Success = false,
+                        OutputUrl = string.Empty,
+                        Cost = 0m,
+                        RawResponse = rawResponse,
+                        ProviderJobId = predictionId,
+                        ErrorMessage = error
+                    };
+                }
+            }
+
+            throw new TimeoutException(
+                $"Prediction {predictionId} timed out after {maxAttempts * 2} seconds.");
+        }
+
+        private static string ExtractOutputUrl(object? output)
+        {
+            if (output == null) return string.Empty;
+
+            var element = (JsonElement)output;
+
+            return element.ValueKind switch
+            {
+                // Video models (minimax) and adirik/interior-design return a single string URL
+                JsonValueKind.String => element.GetString() ?? string.Empty,
+                // Some models return an array of URLs — take the first
+                JsonValueKind.Array => element.EnumerateArray()
+                    .FirstOrDefault()
+                    .GetString() ?? string.Empty,
+                _ => string.Empty
             };
         }
-    }
-
-    Console.WriteLine($"[Replicate] ⏱️ Timeout after {maxAttempts * 2} seconds");
-    throw new TimeoutException(
-        $"Prediction {predictionId} timed out after {maxAttempts * 2} seconds");
-}
-
-public async Task<AIProviderResult> GenerateVideoAsync(AIVideoRequest request)
-{
-    Console.WriteLine($"[Replicate] Video Generation Started");
-    Console.WriteLine($"[Replicate] Prompt: {request.Prompt}");
-    Console.WriteLine($"[Replicate] Image: {request.ImageUrl ?? "None (text-to-video)"}");
-    
-    var hasImage = !string.IsNullOrWhiteSpace(request.ImageUrl);
-    var duration = request.DurationSeconds > 0 ? request.DurationSeconds : 9;
-    
-    object payload;
-    
-    if (hasImage)
-    {
-        payload = new
-        {
-            version = "3ca2bc3597e124149bcae1f9c239790a58ba0f1aa72e1c8747192d2b44284dc4",
-            input = new
-            {
-                prompt = request.Prompt,
-                image = request.ImageUrl,
-                duration = duration,
-                aspect_ratio = "16:9",
-                loop = false
-            }
-        };
-    }
-    else
-    {
-        payload = new
-        {
-            version = "3ca2bc3597e124149bcae1f9c239790a58ba0f1aa72e1c8747192d2b44284dc4",
-            input = new
-            {
-                prompt = request.Prompt,
-                duration = duration,
-                aspect_ratio = "16:9",
-                loop = false
-            }
-        };
-    }
-
-    var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions 
-    { 
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true
-    });
-
-    Console.WriteLine($"[Replicate] Sending: {jsonPayload}");
-
-    var response = await _http.PostAsync(
-        "https://api.replicate.com/v1/predictions",
-        new StringContent(jsonPayload, Encoding.UTF8, "application/json")
-    );
-
-    var rawResponse = await response.Content.ReadAsStringAsync();
-    Console.WriteLine($"[Replicate] Status: {response.StatusCode}");
-
-    if (!response.IsSuccessStatusCode)
-    {
-        Console.WriteLine($"[Replicate] ❌ Error: {rawResponse}");
-        throw new HttpRequestException(
-            $"Replicate API returned {response.StatusCode}: {rawResponse}");
-    }
-
-    var prediction = JsonSerializer.Deserialize<ReplicatePredictionResponse>(rawResponse)!;
-    Console.WriteLine($"[Replicate] ✅ Video prediction created: {prediction.Id}");
-    
-    // ✅ INCREASED: 180 attempts = 6 minutes for 9-second videos
-    return await PollPredictionAsync(prediction.Id, maxAttempts: 180);
-}
     }
 }

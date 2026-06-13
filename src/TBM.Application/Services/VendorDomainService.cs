@@ -7,6 +7,7 @@ using TBM.Core.Entities.Orders;
 using TBM.Core.Entities.Products;
 using TBM.Core.Entities.Users;
 using TBM.Core.Enums;
+using System.Text.RegularExpressions;
 using TBM.Core.Interfaces;
 using Microsoft.AspNetCore.Http;
 using System.Text;
@@ -148,25 +149,52 @@ public class VendorDomainService
             .ToList();
     }
 
-    public async Task<VendorPagedResultDto<VendorActivityDto>> GetActivityAsync(Guid vendorId, int page, int pageSize)
+public async Task<VendorPagedResultDto<VendorActivityDto>> GetActivityAsync(Guid vendorId, int page, int pageSize, ActivityFilter? filter = null)
     {
         var activities = await GetActivitiesAsync(vendorId);
+
+        // Apply filter
+        if (filter == ActivityFilter.Orders)
+        {
+            activities = activities.Where(x => x.OrderId.HasValue).ToList();
+        }
+        else if (filter == ActivityFilter.Projects)
+        {
+            activities = activities.Where(x => x.ProductId.HasValue).ToList();
+        }
+
         var total = activities.Count;
 
-        var items = activities
+        var pagedActivities = activities
             .OrderByDescending(x => x.CreatedAtUtc)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(x => new VendorActivityDto
-            {
-                Id = x.Id,
-                ActivityType = x.ActivityType,
-                Description = x.Description,
-                OrderId = x.OrderId,
-                ProductId = x.ProductId,
-                CreatedAtUtc = x.CreatedAtUtc
-            })
             .ToList();
+
+        // Load customer names for orders
+        var orderIds = pagedActivities.Where(x => x.OrderId.HasValue).Select(x => x.OrderId!.Value).Distinct().ToList();
+        var orderDict = new Dictionary<Guid, string>();
+        foreach (var oid in orderIds)
+        {
+            var order = await _unitOfWork.Orders.GetByIdAsync(oid);
+            orderDict[oid] = order?.User != null ? $"{order.User.FirstName} {order.User.LastName}".Trim() : "";
+        }
+
+        // Map to DTOs
+        var items = new List<VendorActivityDto>();
+        foreach (var activity in pagedActivities)
+        {
+            var customer = activity.OrderId.HasValue && orderDict.TryGetValue(activity.OrderId.Value, out var c) ? c : "";
+            var status = GetActivityStatus(activity.ActivityType, activity.Description);
+            items.Add(new VendorActivityDto
+            {
+                Id = activity.Id,
+                Customer = customer,
+                ActivityType = activity.ActivityType,
+                CreatedAtUtc = activity.CreatedAtUtc,
+                Status = status
+            });
+        }
 
         return new VendorPagedResultDto<VendorActivityDto>
         {
@@ -175,6 +203,32 @@ public class VendorDomainService
             Page = page,
             PageSize = pageSize
         };
+    }
+
+    private string GetActivityStatus(string activityType, string description)
+    {
+        if (activityType.Contains("order_status_updated"))
+        {
+            // Extract status from description like "Order # status changed to Pending"
+            var match = System.Text.RegularExpressions.Regex.Match(description, @"to\s+([A-Za-z\s]+)(?:\s|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (match.Success)
+            {
+                return match.Groups[1].Value.Trim();
+            }
+        }
+        else if (activityType.Contains("inventory_created") || activityType.Contains("inventory_updated"))
+        {
+            return "Active";
+        }
+        else if (activityType == "inventory_deleted")
+        {
+            return "Deleted";
+        }
+        else if (activityType.Contains("low_stock"))
+        {
+            return "Low Stock";
+        }
+        return activityType;
     }
 
     public async Task<VendorPagedResultDto<VendorOrderListItemDto>> GetOrdersAsync(
@@ -198,10 +252,8 @@ public class VendorDomainService
             return EmptyPaged<VendorOrderListItemDto>(page, pageSize);
         }
 
-        if (!assignedOnly && !ownedProductIds.Any() && !assignedOrderIds.Any())
-        {
-            return EmptyPaged<VendorOrderListItemDto>(page, pageSize);
-        }
+        // When vendor has no product ownership and no assignments, show all orders
+        var noOwnership = !ownedProductIds.Any() && !assignedOrderIds.Any();
 
         var baseOrders = new List<Order>();
         const int fetchPageSize = 200;
@@ -235,7 +287,7 @@ public class VendorDomainService
             .Where(o => !o.IsDeleted)
             .Where(o => assignedOnly
                 ? assignedOrderIds.Contains(o.Id)
-                : o.Items.Any(i => ownedProductIds.Contains(i.ProductId)) || assignedOrderIds.Contains(o.Id))
+                : noOwnership || o.Items.Any(i => ownedProductIds.Contains(i.ProductId)) || assignedOrderIds.Contains(o.Id))
             .ToList();
 
         if (!string.IsNullOrWhiteSpace(type))
@@ -790,32 +842,80 @@ public class VendorDomainService
     public async Task<VendorPagedResultDto<VendorDeliveryAssignmentDto>> GetDeliveriesAsync(Guid vendorId, int page, int pageSize, OrderStatus? status)
     {
         var assignments = await GetAssignmentsAsync(vendorId);
+        var assignmentMap = assignments.ToDictionary(x => x.OrderId);
         var list = new List<VendorDeliveryAssignmentDto>();
 
-        foreach (var assignment in assignments.OrderByDescending(x => x.UpdatedAtUtc))
+        if (assignments.Any())
         {
-            var order = await _unitOfWork.Orders.GetByIdAsync(assignment.OrderId);
-            if (order == null)
+            // Vendor has explicit assignments — show only those
+            foreach (var assignment in assignments.OrderByDescending(x => x.UpdatedAtUtc))
             {
-                continue;
+                var order = await _unitOfWork.Orders.GetByIdAsync(assignment.OrderId);
+                if (order == null)
+                {
+                    continue;
+                }
+
+                if (status.HasValue && order.Status != status.Value)
+                {
+                    continue;
+                }
+
+                list.Add(new VendorDeliveryAssignmentDto
+                {
+                    OrderId = order.Id,
+                    OrderNumber = order.OrderNumber,
+                    Status = order.Status,
+                    TrackingNumber = order.TrackingNumber,
+                    DeliveryAgentName = assignment.DeliveryAgentName,
+                    DeliveryAgentPhone = assignment.DeliveryAgentPhone,
+                    AssignmentNote = assignment.AssignmentNote,
+                    UpdatedAtUtc = assignment.UpdatedAtUtc
+                });
+            }
+        }
+        else
+        {
+            // No explicit assignments — fall back to all orders requiring delivery
+            var deliveryStatuses = new[]
+            {
+                OrderStatus.PaymentReceived,
+                OrderStatus.Processing,
+                OrderStatus.Shipped
+            };
+
+            var fetchPage = 1;
+            const int fetchSize = 200;
+            var allOrders = new List<Order>();
+            while (true)
+            {
+                var (chunk, totalCount) = await _unitOfWork.Orders.GetPagedAsync(
+                    fetchPage, fetchSize, null, status, null, null, null, null);
+                allOrders.AddRange(chunk);
+                if (allOrders.Count >= totalCount || !chunk.Any()) break;
+                fetchPage++;
+                if (fetchPage > 200) break;
             }
 
-            if (status.HasValue && order.Status != status.Value)
-            {
-                continue;
-            }
-
-            list.Add(new VendorDeliveryAssignmentDto
-            {
-                OrderId = order.Id,
-                OrderNumber = order.OrderNumber,
-                Status = order.Status,
-                TrackingNumber = order.TrackingNumber,
-                DeliveryAgentName = assignment.DeliveryAgentName,
-                DeliveryAgentPhone = assignment.DeliveryAgentPhone,
-                AssignmentNote = assignment.AssignmentNote,
-                UpdatedAtUtc = assignment.UpdatedAtUtc
-            });
+            list = allOrders
+                .Where(o => !o.IsDeleted && (status.HasValue ? o.Status == status.Value : deliveryStatuses.Contains(o.Status)))
+                .OrderByDescending(o => o.CreatedAt)
+                .Select(o =>
+                {
+                    assignmentMap.TryGetValue(o.Id, out var a);
+                    return new VendorDeliveryAssignmentDto
+                    {
+                        OrderId = o.Id,
+                        OrderNumber = o.OrderNumber,
+                        Status = o.Status,
+                        TrackingNumber = o.TrackingNumber,
+                        DeliveryAgentName = a?.DeliveryAgentName,
+                        DeliveryAgentPhone = a?.DeliveryAgentPhone,
+                        AssignmentNote = a?.AssignmentNote,
+                        UpdatedAtUtc = a?.UpdatedAtUtc ?? o.UpdatedAt ?? o.CreatedAt
+                    };
+                })
+                .ToList();
         }
 
         var total = list.Count;

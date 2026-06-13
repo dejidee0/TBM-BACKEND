@@ -5,7 +5,7 @@ using TBM.Application.Services;
 namespace TBM.API.Controllers.V1.Payments;
 
 [ApiController]
-[Route("api/webhooks/paystack")]
+[Route("api/v1/webhooks/paystack")]
 [EnableRateLimiting("WebhookPolicy")]
 public class PaystackWebhookController : ControllerBase
 {

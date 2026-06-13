@@ -4,7 +4,11 @@ public class OrderDto
 {
     public Guid Id { get; set; }
     public string OrderNumber { get; set; } = string.Empty;
-    public Guid UserId { get; set; }
+    public Guid? UserId { get; set; }
+    public Guid? DesignSessionId { get; set; }
+    public string? GuestEmail { get; set; }
+    public string? GuestPhone { get; set; }
+    public bool IsGuestOrder { get; set; }
     public string UserEmail { get; set; } = string.Empty;
     public string UserFullName { get; set; } = string.Empty;
     

@@ -1,4 +1,5 @@
 using TBM.Application.DTOs.Orders;
+using TBM.Application.DTOs.Subscriptions;
 
 namespace TBM.Application.DTOs.Auth;
 
@@ -23,4 +24,5 @@ public class UserInfoDto
     public string LastName { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
     public List<string> Roles { get; set; } = new();
+    public CurrentSubscriptionDto? Subscription { get; set; }
 }

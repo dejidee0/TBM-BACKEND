@@ -1,5 +1,6 @@
 using TBM.Core.DTOs.Admin;
-using TBM.Application.DTOs.Admin;
+using TBM.Application.Helpers;
+using TBM.Core.Enums;
 using TBM.Core.Interfaces;
 
 namespace TBM.Application.Services;
@@ -13,7 +14,7 @@ public class AdminAnalyticsService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<AdminAnalyticsOverviewDto> GetOverviewAsync()
+    public async Task<TBM.Application.DTOs.Admin.AdminAnalyticsOverviewDto> GetOverviewAsync()
     {
         var now = DateTime.UtcNow;
         var startOfMonth = new DateTime(now.Year, now.Month, 1);
@@ -37,7 +38,7 @@ public class AdminAnalyticsService
         var lastUsers = await _unitOfWork.Users
             .GetUserCountAsync(startOfLastMonth, startOfMonth);
 
-        return new AdminAnalyticsOverviewDto
+        return new TBM.Application.DTOs.Admin.AdminAnalyticsOverviewDto
         {
             TotalRevenue = currentRevenue,
             RevenueGrowthPercentage = CalculateGrowth(lastRevenue, currentRevenue),
@@ -54,12 +55,85 @@ public class AdminAnalyticsService
 
 public async Task<List<TBM.Core.DTOs.Admin.MonthlyRevenueDto>> GetMonthlyRevenueAsync()
 {
-    return await _unitOfWork.Orders.GetMonthlyRevenueAsync(12);
+    const int months = 12;
+    var rows = await _unitOfWork.Orders.GetMonthlyRevenueAsync(months);
+
+    var now = DateTime.UtcNow;
+    var endMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+    var startMonth = endMonth.AddMonths(-(months - 1));
+
+    var lookup = rows.ToDictionary(x => (x.Year, x.Month), x => x.Revenue);
+    return DateRangeHelper.GetMonthStartsUtc(startMonth, endMonth)
+        .Select(m => new TBM.Core.DTOs.Admin.MonthlyRevenueDto
+        {
+            Year = m.Year,
+            Month = m.Month,
+            Revenue = lookup.TryGetValue((m.Year, m.Month), out var revenue) ? revenue : 0m
+        })
+        .ToList();
 }
 
 public async Task<List<TBM.Core.DTOs.Admin.PaymentDistributionDto>> GetPaymentDistributionAsync()
 {
-    return await _unitOfWork.Orders.GetPaymentDistributionAsync();
+    var rows = await _unitOfWork.Orders.GetPaymentDistributionAsync();
+    var enumNames = Enum.GetNames(typeof(PaymentMethod));
+    var expected = new HashSet<string>(enumNames, StringComparer.OrdinalIgnoreCase)
+    {
+        "Unknown"
+    };
+
+    var map = rows.ToDictionary(x => x.PaymentMethod, StringComparer.OrdinalIgnoreCase);
+    var merged = new List<TBM.Core.DTOs.Admin.PaymentDistributionDto>();
+
+    foreach (var name in enumNames)
+    {
+        if (map.TryGetValue(name, out var row))
+        {
+            merged.Add(new TBM.Core.DTOs.Admin.PaymentDistributionDto
+            {
+                PaymentMethod = string.IsNullOrWhiteSpace(row.PaymentMethod) ? name : row.PaymentMethod,
+                Revenue = row.Revenue
+            });
+        }
+        else
+        {
+            merged.Add(new TBM.Core.DTOs.Admin.PaymentDistributionDto
+            {
+                PaymentMethod = name,
+                Revenue = 0m
+            });
+        }
+    }
+
+    if (map.TryGetValue("Unknown", out var unknown))
+    {
+        merged.Add(new TBM.Core.DTOs.Admin.PaymentDistributionDto
+        {
+            PaymentMethod = "Unknown",
+            Revenue = unknown.Revenue
+        });
+    }
+    else
+    {
+        merged.Add(new TBM.Core.DTOs.Admin.PaymentDistributionDto
+        {
+            PaymentMethod = "Unknown",
+            Revenue = 0m
+        });
+    }
+
+    foreach (var row in rows)
+    {
+        if (!expected.Contains(row.PaymentMethod))
+        {
+            merged.Add(row);
+        }
+    }
+
+    return merged
+        .OrderByDescending(x => x.Revenue)
+        .ThenBy(x => x.PaymentMethod)
+        .ToList();
 }
 
     private decimal CalculateGrowth(decimal previous, decimal current)

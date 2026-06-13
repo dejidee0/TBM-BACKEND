@@ -1,5 +1,7 @@
 using TBM.Core.Interfaces.Repositories;
 using TBM.Core.Interfaces.Repositories.AI;
+using TBM.Core.Interfaces.Repositories.DesignFlow;
+using TBM.Core.Interfaces.Repositories.Subscriptions;
 
 namespace TBM.Core.Interfaces;
 
@@ -16,8 +18,12 @@ public interface IUnitOfWork : IDisposable
     IAIRenovationEstimateRepository AIRenovationEstimates { get; }
     IAIAssistantRepository AIAssistant { get; }
 
-ISettingRepository Settings { get; }
-IAuditLogRepository AuditLogs { get; }
+    IDesignSessionRepository DesignSessions { get; }
+    IBillOfMaterialsRepository BillsOfMaterials { get; }
+    IProjectRepository Projects { get; }
+
+    ISettingRepository Settings { get; }
+    IAuditLogRepository AuditLogs { get; }
 
     
     // Product repositories
@@ -28,12 +34,19 @@ IAuditLogRepository AuditLogs { get; }
     // Order repositories
     ICartRepository Carts { get; }
     IOrderRepository Orders { get; }      
-IOrderStatusHistoryRepository OrderStatusHistories { get; }
-IWebhookEventRepository WebhookEvents { get; }
+    IOrderStatusHistoryRepository OrderStatusHistories { get; }
+    IWebhookEventRepository WebhookEvents { get; }
 
+    // Subscription repositories
+    ISubscriptionRepository Subscriptions { get; }
+    IPricingConfigRepository PricingConfigs { get; }
+    IDiscountRepository Discounts { get; }
 
-    
+    // Portfolio
+    IPortfolioRepository Portfolio { get; }
+
     Task<int> SaveChangesAsync();
+    void ClearChangeTracker();
     Task BeginTransactionAsync();
     Task CommitTransactionAsync();
     Task RollbackTransactionAsync();

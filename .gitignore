@@ -399,3 +399,6 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+.mcp.json
+src/TBM.API/appsettings.Development.json
+src/TBM.API/appsettings.Production.json

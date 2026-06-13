@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TBM.Application.DTOs.Auth;
 using TBM.Application.DTOs.Common;
 using TBM.Application.DTOs.Orders;
 using TBM.Application.Helpers;
-using TBM.Application.Interfaces; 
+using TBM.Application.Interfaces;
+using TBM.Application.Services.Subscriptions;
 using TBM.Core.Entities.Users;
 using TBM.Core.Enums;
 using TBM.Core.Interfaces;
@@ -16,21 +18,27 @@ public class AuthService : IAuthService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly JwtHelper _jwtHelper;
+    private readonly JwtSettings _jwtSettings;
     private readonly IEmailService _emailService;
     private readonly ICartService _cartService;
+    private readonly SubscriptionService _subscriptionService;
     private readonly ILogger<AuthService> _logger;
 
     public AuthService(
         IUnitOfWork unitOfWork,
         JwtHelper jwtHelper,
+        IOptions<JwtSettings> jwtSettings,
         IEmailService emailService,
         ICartService cartService,
+        SubscriptionService subscriptionService,
         ILogger<AuthService> logger)
     {
         _unitOfWork = unitOfWork;
         _jwtHelper = jwtHelper;
+        _jwtSettings = jwtSettings.Value;
         _emailService = emailService;
         _cartService = cartService;
+        _subscriptionService = subscriptionService;
         _logger = logger;
     }
     
@@ -115,7 +123,7 @@ await _emailService.SendVerificationEmailAsync(
         {
             AccessToken = accessToken,
             RefreshToken = refreshToken,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpiryMinutes),
             User = new UserInfoDto
             {
                 Id = user.Id,
@@ -207,11 +215,13 @@ await _emailService.SendVerificationEmailAsync(
         await _unitOfWork.Users.UpdateAsync(user);
         await _unitOfWork.SaveChangesAsync();
         
+        var subscription = await _subscriptionService.GetCurrentAsync(user.Id);
+
         var response = new TokenResponseDto
         {
             AccessToken = accessToken,
             RefreshToken = refreshToken,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpiryMinutes),
             User = new UserInfoDto
             {
                 Id = user.Id,
@@ -219,7 +229,8 @@ await _emailService.SendVerificationEmailAsync(
                 FirstName = user.FirstName,
                 LastName = user.LastName,
                 FullName = user.FullName,
-                Roles = roles
+                Roles = roles,
+                Subscription = subscription
             }
         };
 
@@ -252,11 +263,13 @@ await _emailService.SendVerificationEmailAsync(
         await _unitOfWork.Users.UpdateAsync(user);
         await _unitOfWork.SaveChangesAsync();
         
+        var subscription = await _subscriptionService.GetCurrentAsync(user.Id);
+
         var response = new TokenResponseDto
         {
             AccessToken = accessToken,
             RefreshToken = newRefreshToken,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpiryMinutes),
             User = new UserInfoDto
             {
                 Id = user.Id,
@@ -264,10 +277,11 @@ await _emailService.SendVerificationEmailAsync(
                 FirstName = user.FirstName,
                 LastName = user.LastName,
                 FullName = user.FullName,
-                Roles = roles.ToList()
+                Roles = roles.ToList(),
+                Subscription = subscription
             }
         };
-        
+
         return ApiResponse<TokenResponseDto>.SuccessResponse(response, "Token refreshed successfully");
     }
     
@@ -401,7 +415,7 @@ await _emailService.SendVerificationEmailAsync(
     {
         AccessToken = accessToken,
         RefreshToken = refreshToken,
-        ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+        ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpiryMinutes),
         User = new UserInfoDto
         {
             Id = user.Id,

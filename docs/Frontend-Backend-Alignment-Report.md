@@ -1,7 +1,7 @@
 # Frontend-Backend Alignment Report
 
 Generated on: February 22, 2026  
-Input docs: `docs/frontend doc.md`, `docs/TBM-API-Documentation.md`  
+Input docs: `docs/frontend doc.md`, `docs/TBM-API-Documentation.txt`  
 Output matrix: `docs/frontend-backend-alignment-matrix.csv`
 
 This report presents two lenses:

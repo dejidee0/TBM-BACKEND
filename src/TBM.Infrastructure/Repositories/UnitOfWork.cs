@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using TBM.Core.Interfaces;
 using TBM.Core.Interfaces.Repositories;
 using TBM.Core.Interfaces.Repositories.AI;
+using TBM.Core.Interfaces.Repositories.DesignFlow;
+using TBM.Core.Interfaces.Repositories.Subscriptions;
 using TBM.Infrastructure.Data;
 
 namespace TBM.Infrastructure.Repositories;
@@ -22,6 +24,9 @@ public class UnitOfWork : IUnitOfWork
     public IAIUsageRepository AIUsages { get; }
     public IAIRenovationEstimateRepository AIRenovationEstimates { get; }
     public IAIAssistantRepository AIAssistant { get; }
+    public IDesignSessionRepository DesignSessions { get; }
+    public IBillOfMaterialsRepository BillsOfMaterials { get; }
+    public IProjectRepository Projects { get; }
     public ISettingRepository Settings { get; }
     public IOrderStatusHistoryRepository OrderStatusHistories { get; }
 
@@ -35,6 +40,14 @@ public class UnitOfWork : IUnitOfWork
     public IWebhookEventRepository WebhookEvents { get; }
     public IOrderRepository Orders { get; }
     public IAuditLogRepository AuditLogs { get; }
+
+    // Subscription repositories
+    public ISubscriptionRepository Subscriptions { get; }
+    public IPricingConfigRepository PricingConfigs { get; }
+    public IDiscountRepository Discounts { get; }
+
+    // Portfolio
+    public IPortfolioRepository Portfolio { get; }
 
     public UnitOfWork(
         ApplicationDbContext context,
@@ -53,8 +66,15 @@ public class UnitOfWork : IUnitOfWork
         IAIUsageRepository aiUsages,
         IAIRenovationEstimateRepository aiRenovationEstimates,
         IAIAssistantRepository aiAssistant,
+        IDesignSessionRepository designSessions,
+        IBillOfMaterialsRepository billsOfMaterials,
+        IProjectRepository projects,
         IWebhookEventRepository webhookEvents,
-        IOrderRepository orderRepository)
+        IOrderRepository orderRepository,
+        ISubscriptionRepository subscriptions,
+        IPricingConfigRepository pricingConfigs,
+        IDiscountRepository discounts,
+        IPortfolioRepository portfolio)
     {
         _context = context;
         Users = userRepository;
@@ -73,13 +93,25 @@ public class UnitOfWork : IUnitOfWork
         AIUsages = aiUsages;
         AIRenovationEstimates = aiRenovationEstimates;
         AIAssistant = aiAssistant;
+        DesignSessions = designSessions;
+        BillsOfMaterials = billsOfMaterials;
+        Projects = projects;
         Orders = orderRepository;
         WebhookEvents = webhookEvents;
+        Subscriptions = subscriptions;
+        PricingConfigs = pricingConfigs;
+        Discounts = discounts;
+        Portfolio = portfolio;
     }
 
     public async Task<int> SaveChangesAsync()
     {
         return await _context.SaveChangesAsync();
+    }
+
+    public void ClearChangeTracker()
+    {
+        _context.ChangeTracker.Clear();
     }
 
     public async Task BeginTransactionAsync()
@@ -127,6 +159,7 @@ public class UnitOfWork : IUnitOfWork
         var strategy = _context.Database.CreateExecutionStrategy();
         return strategy.ExecuteAsync(async () =>
         {
+            _context.ChangeTracker.Clear();
             await using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
@@ -146,6 +179,7 @@ public class UnitOfWork : IUnitOfWork
         var strategy = _context.Database.CreateExecutionStrategy();
         return strategy.ExecuteAsync(async () =>
         {
+            _context.ChangeTracker.Clear();
             await using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {

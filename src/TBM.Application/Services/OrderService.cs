@@ -2,7 +2,11 @@ using TBM.Application.DTOs.Common;
 using TBM.Application.DTOs.Orders;
 using TBM.Application.DTOs.Products;
 using TBM.Application.Interfaces;
+using TBM.Application.Services.DesignFlow;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using TBM.Core.Entities.Orders;
+using TBM.Core.Entities.DesignFlow;
 using TBM.Core.Enums;
 using TBM.Core.Interfaces;
 
@@ -11,10 +15,17 @@ namespace TBM.Application.Services;
 public class OrderService : IOrderService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ProjectService _projectService;
+    private readonly ILogger<OrderService> _logger;
     
-    public OrderService(IUnitOfWork unitOfWork)
+    public OrderService(
+        IUnitOfWork unitOfWork,
+        ProjectService projectService,
+        ILogger<OrderService> logger)
     {
         _unitOfWork = unitOfWork;
+        _projectService = projectService;
+        _logger = logger;
     }
     
     public async Task<ApiResponse<OrderDto>> GetOrderByIdAsync(Guid orderId, Guid? userId = null)
@@ -85,10 +96,74 @@ public class OrderService : IOrderService
         return ApiResponse<List<OrderDto>>.SuccessResponse(orderDtos);
     }
     
-    public async Task<ApiResponse<OrderDto>> CreateOrderAsync(Guid userId, CreateOrderDto dto)
+    public async Task<ApiResponse<OrderDto>> CreateOrderAsync(Guid? userId, CreateOrderDto dto)
     {
-        // Get user's cart
-        var cart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+        var isGuest = !userId.HasValue;
+
+        if (isGuest)
+        {
+            if (string.IsNullOrWhiteSpace(dto.GuestSessionId))
+            {
+                return ApiResponse<OrderDto>.ErrorResponse("Guest session is required");
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.GuestEmail))
+            {
+                return ApiResponse<OrderDto>.ErrorResponse("Guest email is required");
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.GuestPhone))
+            {
+                return ApiResponse<OrderDto>.ErrorResponse("Guest phone is required");
+            }
+
+            if (dto.DesignSessionId.HasValue)
+            {
+                return ApiResponse<OrderDto>.ErrorResponse("Design session checkout requires authentication");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(dto.PaymentReference))
+        {
+            var existingOrder = await _unitOfWork.Orders.GetByPaymentReferenceAsync(dto.PaymentReference, userId);
+            if (existingOrder != null)
+            {
+                _logger.LogWarning(
+                    "Duplicate order creation attempt for payment reference {Reference}. Returning existing order {OrderId}",
+                    dto.PaymentReference,
+                    existingOrder.Id);
+
+                return ApiResponse<OrderDto>.SuccessResponse(
+                    MapOrderToDto(existingOrder),
+                    "Order already exists for this payment reference");
+            }
+        }
+
+        DesignSession? designSession = null;
+        if (dto.DesignSessionId.HasValue)
+        {
+            designSession = await _unitOfWork.DesignSessions.GetByIdAsync(dto.DesignSessionId.Value);
+            if (designSession == null || !userId.HasValue || designSession.UserId != userId.Value)
+            {
+                return ApiResponse<OrderDto>.ErrorResponse("Design session not found");
+            }
+
+            if (designSession.OrderId.HasValue)
+            {
+                var existingOrder = await _unitOfWork.Orders.GetByIdAsync(designSession.OrderId.Value);
+                if (existingOrder != null)
+                {
+                    return ApiResponse<OrderDto>.SuccessResponse(
+                        MapOrderToDto(existingOrder),
+                        "Order already exists for this design session");
+                }
+            }
+        }
+
+        // Get cart
+        var cart = userId.HasValue
+            ? await _unitOfWork.Carts.GetByUserIdAsync(userId.Value)
+            : await _unitOfWork.Carts.GetByGuestSessionIdAsync(dto.GuestSessionId!.Trim());
         
         if (cart == null || !cart.Items.Any())
         {
@@ -147,6 +222,10 @@ public class OrderService : IOrderService
             {
                 OrderNumber = orderNumber,
                 UserId = userId,
+                DesignSessionId = dto.DesignSessionId,
+                IsGuestOrder = isGuest,
+                GuestEmail = isGuest ? dto.GuestEmail!.Trim() : null,
+                GuestPhone = isGuest ? dto.GuestPhone!.Trim() : null,
                 Status = OrderStatus.Pending,
                 PaymentStatus = PaymentStatus.Pending,
                 SubTotal = subTotal,
@@ -184,21 +263,58 @@ public class OrderService : IOrderService
 
                 order.Items.Add(orderItem);
 
-                // Update product stock
+                // Update product stock using atomic operation to avoid concurrency issues
                 if (cartItem.Product.TrackInventory)
                 {
-                    await _unitOfWork.Products.UpdateStockAsync(
+                    var rowsAffected = await _unitOfWork.Products.UpdateStockAtomicAsync(
                         cartItem.ProductId,
-                        (cartItem.Product.StockQuantity ?? 0) - cartItem.Quantity
-                    );
+                        cartItem.Quantity);
+                    
+                    if (rowsAffected == 0)
+                    {
+                        // Stock update failed - product may not exist, not track inventory, or have insufficient stock
+                        throw new InvalidOperationException(
+                            $"Failed to update stock for product '{cartItem.Product.Name}'. The product may no longer be available or has insufficient stock.");
+                    }
                 }
             }
 
             await _unitOfWork.SaveChangesAsync();
 
+            if (designSession != null)
+            {
+                designSession.OrderId = order.Id;
+                designSession.Status = DesignSessionStatus.Ordered;
+                designSession.CurrentStep = "Awaiting payment";
+
+                if (designSession.BOMId.HasValue)
+                {
+                    var bom = await _unitOfWork.BillsOfMaterials.GetByIdAsync(designSession.BOMId.Value);
+                    if (bom != null)
+                    {
+                        bom.Status = BillOfMaterialsStatus.Ordered;
+                        await _unitOfWork.BillsOfMaterials.UpdateAsync(bom);
+                    }
+                }
+
+                await _unitOfWork.DesignSessions.UpdateAsync(designSession);
+                await _unitOfWork.SaveChangesAsync();
+            }
+
             // Clear cart
-            await _unitOfWork.Carts.ClearCartAsync(cart.Id);
-            await _unitOfWork.SaveChangesAsync();
+            try
+            {
+                await _unitOfWork.Carts.ClearCartAsync(cart.Id);
+                await _unitOfWork.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Concurrency exception while clearing cart {CartId} for customer {CustomerId}. Cart may already be empty.",
+                    cart.Id,
+                    userId?.ToString() ?? dto.GuestSessionId);
+            }
 
             return order.Id;
         });
@@ -294,6 +410,11 @@ public class OrderService : IOrderService
         
         await _unitOfWork.Orders.UpdateAsync(order);
         await _unitOfWork.SaveChangesAsync();
+
+        if (order.PaymentStatus == PaymentStatus.Paid)
+        {
+            await _projectService.CreateProjectFromOrderAsync(order.Id);
+        }
         
         // Reload
         order = await _unitOfWork.Orders.GetByIdAsync(orderId);
@@ -369,8 +490,14 @@ public class OrderService : IOrderService
             Id = order.Id,
             OrderNumber = order.OrderNumber,
             UserId = order.UserId,
-            UserEmail = order.User.Email,
-            UserFullName = $"{order.User.FirstName} {order.User.LastName}",
+            DesignSessionId = order.DesignSessionId,
+            GuestEmail = order.GuestEmail,
+            GuestPhone = order.GuestPhone,
+            IsGuestOrder = order.IsGuestOrder,
+            UserEmail = order.User?.Email ?? order.GuestEmail ?? string.Empty,
+            UserFullName = order.User == null
+                ? order.ShippingFullName
+                : $"{order.User.FirstName} {order.User.LastName}",
             Status = (int)order.Status,
             StatusName = order.Status.ToString(),
             PaymentStatus = (int)order.PaymentStatus,

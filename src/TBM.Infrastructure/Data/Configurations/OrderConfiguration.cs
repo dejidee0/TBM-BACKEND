@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TBM.Core.Entities.Orders;
+using TBM.Core.Entities.DesignFlow;
 
 namespace TBM.Infrastructure.Data.Configurations;
 
@@ -18,6 +19,10 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         
         builder.HasIndex(o => o.OrderNumber)
             .IsUnique();
+
+        builder.HasIndex(o => o.DesignSessionId)
+            .IsUnique()
+            .HasFilter("[DesignSessionId] IS NOT NULL");
         
         builder.Property(o => o.Status)
             .IsRequired()
@@ -29,6 +34,17 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         
         builder.Property(o => o.PaymentMethod)
             .HasConversion<int>();
+
+        builder.Property(o => o.DesignSessionId);
+
+        builder.Property(o => o.GuestEmail)
+            .HasMaxLength(255);
+
+        builder.Property(o => o.GuestPhone)
+            .HasMaxLength(20);
+
+        builder.Property(o => o.IsGuestOrder)
+            .IsRequired();
         
         builder.Property(o => o.SubTotal)
             .HasColumnType("decimal(18,2)")
@@ -75,6 +91,12 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         
         builder.Property(o => o.PaymentReference)
             .HasMaxLength(200);
+
+        // RowVersion column for optimistic concurrency handling
+        builder.Property(o => o.RowVersion)
+            .IsRowVersion()
+            .IsConcurrencyToken()
+            .ValueGeneratedOnAddOrUpdate();
         
         builder.Property(o => o.TrackingNumber)
             .HasMaxLength(100);
@@ -93,6 +115,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .WithMany()
             .HasForeignKey(o => o.UserId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<DesignSession>()
+            .WithMany()
+            .HasForeignKey(o => o.DesignSessionId)
+            .OnDelete(DeleteBehavior.SetNull);
         
         // Relationship with Items
         builder.HasMany(o => o.Items)

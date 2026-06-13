@@ -170,7 +170,89 @@ public static class DbInitializer
                     IsActive = true,
                     IsFeatured = true,
                     DisplayOrder = 1,
-                    Tags = "bathroom, wc, wall-mounted, premium"
+                    Tags = "bathroom, wc, wall-mounted, premium",
+                    AIKeywords = "toilet, wc, sanitary, bathroom",
+                    MaterialType = "Ceramic",
+                    QualityTier = "Luxury",
+                    RecommendedFor = "Luxury bathrooms, master suites"
+                },
+
+                new()
+                {
+                    Name = "Standard Floor Tile",
+                    Description = "Durable ceramic floor tile suitable for everyday use.",
+                    ShortDescription = "Standard ceramic flooring tile",
+                    Slug = "standard-floor-tile",
+                    SKU = "TILE-STD-001",
+                    BrandType = BrandType.Bogat,
+                    ProductType = ProductType.PhysicalProduct,
+                    CategoryId = context.Categories.First(c => c.Slug == "tiles-flooring").Id,
+                    Price = 15000,
+                    CompareAtPrice = 17000,
+                    ShowPrice = true,
+                    StockQuantity = 120,
+                    LowStockThreshold = 20,
+                    TrackInventory = true,
+                    IsActive = true,
+                    IsFeatured = false,
+                    DisplayOrder = 2,
+                    Tags = "flooring, tile, standard",
+                    AIKeywords = "tile, flooring, ceramic, standard",
+                    MaterialType = "Ceramic",
+                    QualityTier = "Standard",
+                    RecommendedFor = "General residential flooring"
+                },
+
+                new()
+                {
+                    Name = "Budget Wall Paint",
+                    Description = "Affordable washable wall paint for interior spaces.",
+                    ShortDescription = "Interior wall paint",
+                    Slug = "budget-wall-paint",
+                    SKU = "PAINT-BUD-001",
+                    BrandType = BrandType.Bogat,
+                    ProductType = ProductType.PhysicalProduct,
+                    CategoryId = context.Categories.First(c => c.Slug == "building-materials").Id,
+                    Price = 8500,
+                    CompareAtPrice = 9500,
+                    ShowPrice = true,
+                    StockQuantity = 240,
+                    LowStockThreshold = 30,
+                    TrackInventory = true,
+                    IsActive = true,
+                    IsFeatured = false,
+                    DisplayOrder = 3,
+                    Tags = "paint, budget, interior",
+                    AIKeywords = "paint, interior, wall, budget",
+                    MaterialType = "Paint",
+                    QualityTier = "Budget",
+                    RecommendedFor = "Affordable interior refresh"
+                },
+
+                new()
+                {
+                    Name = "Premium Stone Tile",
+                    Description = "Luxury stone-effect tile for high-end finishes.",
+                    ShortDescription = "Luxury stone tile",
+                    Slug = "premium-stone-tile",
+                    SKU = "TILE-LUX-001",
+                    BrandType = BrandType.Bogat,
+                    ProductType = ProductType.PhysicalProduct,
+                    CategoryId = context.Categories.First(c => c.Slug == "tiles-flooring").Id,
+                    Price = 32500,
+                    CompareAtPrice = 36000,
+                    ShowPrice = true,
+                    StockQuantity = 75,
+                    LowStockThreshold = 10,
+                    TrackInventory = true,
+                    IsActive = true,
+                    IsFeatured = true,
+                    DisplayOrder = 4,
+                    Tags = "tile, stone, luxury",
+                    AIKeywords = "tile, stone, luxury, premium",
+                    MaterialType = "Stone",
+                    QualityTier = "Premium",
+                    RecommendedFor = "Luxury interiors and feature walls"
                 },
                 
                 // Sample TBM Service
@@ -188,7 +270,11 @@ public static class DbInitializer
                     IsActive = true,
                     IsFeatured = true,
                     DisplayOrder = 1,
-                    Tags = "construction, residential, building"
+                    Tags = "construction, residential, building",
+                    AIKeywords = "construction, service, residential",
+                    MaterialType = "Service",
+                    QualityTier = "Standard",
+                    RecommendedFor = "Construction service"
                 }
             };
             

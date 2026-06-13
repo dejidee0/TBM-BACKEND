@@ -12,11 +12,18 @@ public class CartConfiguration : IEntityTypeConfiguration<Cart>
         
         builder.HasKey(c => c.Id);
         
-        builder.Property(c => c.UserId)
-            .IsRequired();
+        builder.Property(c => c.UserId);
+
+        builder.Property(c => c.GuestSessionId)
+            .HasMaxLength(100);
         
         builder.HasIndex(c => c.UserId)
-            .IsUnique();
+            .IsUnique()
+            .HasFilter("[UserId] IS NOT NULL");
+
+        builder.HasIndex(c => c.GuestSessionId)
+            .IsUnique()
+            .HasFilter("[GuestSessionId] IS NOT NULL");
         
         // One user can have one active cart
         builder.HasMany(c => c.Items)

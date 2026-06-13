@@ -213,6 +213,7 @@ public class AuthController : ControllerBase
     /// Google OAuth is currently not configured on this backend.
     /// </summary>
     [AllowAnonymous]
+    [HttpGet("google")]
     [HttpGet("~/auth/google")]
     public IActionResult GoogleOAuth()
     {
@@ -231,6 +232,7 @@ public class AuthController : ControllerBase
     /// Apple OAuth is currently not configured on this backend.
     /// </summary>
     [AllowAnonymous]
+    [HttpGet("apple")]
     [HttpGet("~/auth/apple")]
     public IActionResult AppleOAuth()
     {

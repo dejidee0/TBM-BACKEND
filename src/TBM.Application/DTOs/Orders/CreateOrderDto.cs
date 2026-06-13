@@ -2,6 +2,11 @@ namespace TBM.Application.DTOs.Orders;
 
 public class CreateOrderDto
 {
+    public Guid? DesignSessionId { get; set; }
+    public string? PaymentReference { get; set; }
+    public string? GuestEmail { get; set; }
+    public string? GuestPhone { get; set; }
+    public string? GuestSessionId { get; set; }
     public string ShippingFullName { get; set; } = string.Empty;
     public string ShippingPhone { get; set; } = string.Empty;
     public string ShippingAddress { get; set; } = string.Empty;

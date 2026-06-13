@@ -182,7 +182,8 @@ public async Task<List<PaymentDistributionDto>> GetPaymentDistributionAsync()
                 o.OrderNumber.Contains(searchTerm) ||
                 o.ShippingFullName.Contains(searchTerm) ||
                 o.ShippingPhone.Contains(searchTerm) ||
-                o.User.Email.Contains(searchTerm)
+                (o.User != null && o.User.Email.Contains(searchTerm)) ||
+                (o.GuestEmail != null && o.GuestEmail.Contains(searchTerm))
             );
         }
         
@@ -214,7 +215,16 @@ public async Task<List<PaymentDistributionDto>> GetPaymentDistributionAsync()
     
     public Task UpdateAsync(Order order)
     {
-        _context.Orders.Update(order);
+        // Use Entry().State instead of DbSet.Update() to avoid marking loaded navigation
+        // properties (Items, User) as Modified — which causes unnecessary UPDATEs and
+        // triggers spurious DbUpdateConcurrencyException on the Order's RowVersion.
+        var entry = _context.Entry(order);
+        if (entry.State == EntityState.Detached)
+        {
+            _context.Attach(order);
+            entry.State = EntityState.Modified;
+        }
+        // Already tracked (Unchanged or Modified) — EF snapshot tracking detects changes.
         return Task.CompletedTask;
     }
     

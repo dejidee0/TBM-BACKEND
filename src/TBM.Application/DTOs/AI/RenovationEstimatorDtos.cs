@@ -13,8 +13,34 @@ public class CreateRenovationEstimateRequestDto
     public bool IncludeElectrical { get; set; }
     public bool IncludePlumbing { get; set; }
     public decimal ContingencyPercent { get; set; } = 10m;
+
+    // Backwards compatibility: some clients send a nested `roomDimensions` object
+    // with { length, width, height } instead of the top-level meter properties.
+    // When the nested object is present, populate the top-level values if they
+    // were not provided (or are zero).
+    private RoomDimensionsDto? _roomDimensions;
+    public RoomDimensionsDto? RoomDimensions
+    {
+        get => _roomDimensions;
+        set
+        {
+            _roomDimensions = value;
+            if (value != null)
+            {
+                if (LengthMeters <= 0 && value.Length > 0) LengthMeters = value.Length;
+                if (WidthMeters <= 0 && value.Width > 0) WidthMeters = value.Width;
+                if (HeightMeters <= 0 && value.Height > 0) HeightMeters = value.Height;
+            }
+        }
+    }
 }
 
+public class RoomDimensionsDto
+{
+    public decimal Length { get; set; }
+    public decimal Width { get; set; }
+    public decimal Height { get; set; }
+}
 public class RenovationEstimateSummaryDto
 {
     public Guid EstimateId { get; set; }

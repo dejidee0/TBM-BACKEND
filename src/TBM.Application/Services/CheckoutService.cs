@@ -1,9 +1,11 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TBM.Application.DTOs.Checkout;
 using TBM.Application.DTOs.Common;
 using TBM.Application.DTOs.Orders;
 using TBM.Application.Interfaces;
+using TBM.Application.Services.DesignFlow;
 using TBM.Core.Entities.Payments;
 using TBM.Core.Entities.Users;
 using TBM.Core.Enums;
@@ -21,6 +23,7 @@ public class CheckoutService : ICheckoutService
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly IOrderService _orderService;
+    private readonly ProjectService _projectService;
     private readonly IPromoService _promoService;
     private readonly AuditService _auditService;
     private readonly PaystackService _paystackService;
@@ -29,6 +32,7 @@ public class CheckoutService : ICheckoutService
     public CheckoutService(
         IUnitOfWork unitOfWork,
         IOrderService orderService,
+        ProjectService projectService,
         IPromoService promoService,
         AuditService auditService,
         PaystackService paystackService,
@@ -36,6 +40,7 @@ public class CheckoutService : ICheckoutService
     {
         _unitOfWork = unitOfWork;
         _orderService = orderService;
+        _projectService = projectService;
         _promoService = promoService;
         _auditService = auditService;
         _paystackService = paystackService;
@@ -44,7 +49,19 @@ public class CheckoutService : ICheckoutService
 
     public async Task<ApiResponse<CheckoutSummaryDto>> GetCheckoutSummaryAsync(Guid userId, string? promoCode = null)
     {
-        var cart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+        return await GetCheckoutSummaryAsync(userId, null, promoCode);
+    }
+
+    public async Task<ApiResponse<CheckoutSummaryDto>> GetCheckoutSummaryAsync(
+        Guid? userId,
+        string? guestSessionId,
+        string? promoCode = null)
+    {
+        var cart = userId.HasValue
+            ? await _unitOfWork.Carts.GetByUserIdAsync(userId.Value)
+            : string.IsNullOrWhiteSpace(guestSessionId)
+                ? null
+                : await _unitOfWork.Carts.GetByGuestSessionIdAsync(guestSessionId.Trim());
 
         if (cart == null || !cart.Items.Any())
         {
@@ -71,7 +88,7 @@ public class CheckoutService : ICheckoutService
 
         if (!string.IsNullOrWhiteSpace(promoCode))
         {
-            promoResult = await _promoService.ValidateAsync(userId, subtotal, promoCode);
+            promoResult = await _promoService.ValidateAsync(userId ?? Guid.Empty, subtotal, promoCode);
             if (!promoResult.Success)
             {
                 return ApiResponse<CheckoutSummaryDto>.ErrorResponse(
@@ -82,7 +99,9 @@ public class CheckoutService : ICheckoutService
         }
 
         var total = Math.Max(0, subtotal + shipping + tax - discount);
-        var (addresses, defaultAddress) = await GetAddressDataAsync(userId);
+        var (addresses, defaultAddress) = userId.HasValue
+            ? await GetAddressDataAsync(userId.Value)
+            : (new List<CheckoutAddressDto>(), null);
 
         var summary = new CheckoutSummaryDto
         {
@@ -102,19 +121,28 @@ public class CheckoutService : ICheckoutService
 
     public async Task<ApiResponse<PromoValidationResultDto>> ValidatePromoAsync(Guid userId, string code)
     {
+        return await ValidatePromoAsync(userId, null, code);
+    }
+
+    public async Task<ApiResponse<PromoValidationResultDto>> ValidatePromoAsync(Guid? userId, string? guestSessionId, string code)
+    {
         if (string.IsNullOrWhiteSpace(code))
         {
             return ApiResponse<PromoValidationResultDto>.ErrorResponse("Promo code is required");
         }
 
-        var cart = await _unitOfWork.Carts.GetByUserIdAsync(userId);
+        var cart = userId.HasValue
+            ? await _unitOfWork.Carts.GetByUserIdAsync(userId.Value)
+            : string.IsNullOrWhiteSpace(guestSessionId)
+                ? null
+                : await _unitOfWork.Carts.GetByGuestSessionIdAsync(guestSessionId.Trim());
         if (cart == null || !cart.Items.Any())
         {
             return ApiResponse<PromoValidationResultDto>.ErrorResponse("Cart is empty");
         }
 
         var subTotal = cart.Items.Sum(i => i.Quantity * i.UnitPrice);
-        var result = await _promoService.ValidateAsync(userId, subTotal, code);
+        var result = await _promoService.ValidateAsync(userId ?? Guid.Empty, subTotal, code);
 
         if (!result.Success)
         {
@@ -126,6 +154,14 @@ public class CheckoutService : ICheckoutService
 
     public async Task<ApiResponse<CheckoutPaymentResultDto>> ProcessPaymentAsync(
         Guid userId,
+        CheckoutPaymentRequestDto dto,
+        string? idempotencyKey = null)
+    {
+        return await ProcessPaymentAsync((Guid?)userId, dto, idempotencyKey);
+    }
+
+    public async Task<ApiResponse<CheckoutPaymentResultDto>> ProcessPaymentAsync(
+        Guid? userId,
         CheckoutPaymentRequestDto dto,
         string? idempotencyKey = null)
     {
@@ -144,7 +180,7 @@ public class CheckoutService : ICheckoutService
 
             if (paymentMethod == PaymentMethod.Paystack)
             {
-                return await HandleExistingPaystackOrderAsync(existingOrder, userId, effectiveIdempotencyKey, dto.Payment.CallbackUrl);
+                return await HandleExistingPaystackOrderAsync(existingOrder, userId, effectiveIdempotencyKey, dto.Payment.CallbackUrl, dto.GuestEmail);
             }
 
             await _auditService.LogAsync(
@@ -157,6 +193,11 @@ public class CheckoutService : ICheckoutService
                     orderId = existingOrder.Id,
                     idempotencyKey = effectiveIdempotencyKey
                 });
+
+            if (existingOrder.PaymentStatus == PaymentStatus.Paid)
+            {
+                await _projectService.CreateProjectFromOrderAsync(existingOrder.Id);
+            }
 
             return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
                 new CheckoutPaymentResultDto
@@ -172,7 +213,7 @@ public class CheckoutService : ICheckoutService
                 });
         }
 
-        var summaryResult = await GetCheckoutSummaryAsync(userId, dto.PromoCode);
+        var summaryResult = await GetCheckoutSummaryAsync(userId, dto.GuestSessionId, dto.PromoCode);
         if (!summaryResult.Success || summaryResult.Data == null)
         {
             return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse(summaryResult.Message);
@@ -184,7 +225,7 @@ public class CheckoutService : ICheckoutService
                 $"Checkout amount mismatch. Expected {summaryResult.Data.Total:N2}, received {dto.Total:N2}.");
         }
 
-        var delivery = BuildDelivery(dto.Delivery, summaryResult.Data.DefaultAddress);
+        var delivery = BuildDelivery(dto.Delivery, summaryResult.Data.DefaultAddress, dto.GuestPhone);
         if (delivery == null)
         {
             return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse(
@@ -193,6 +234,11 @@ public class CheckoutService : ICheckoutService
 
         var createOrderDto = new CreateOrderDto
         {
+            DesignSessionId = dto.DesignSessionId,
+            PaymentReference = effectiveIdempotencyKey,
+            GuestEmail = dto.GuestEmail,
+            GuestPhone = dto.GuestPhone,
+            GuestSessionId = dto.GuestSessionId,
             ShippingFullName = delivery.FullName!,
             ShippingPhone = delivery.Phone!,
             ShippingAddress = delivery.Address!,
@@ -212,18 +258,29 @@ public class CheckoutService : ICheckoutService
             return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse(orderResult.Message);
         }
 
+        // Detach every entity the CreateOrderAsync transaction left in the tracker
+        // (Order, OrderItems, CartItems, DesignSession, etc.).
+        // Reason: ExecuteInTransactionAsync clears the tracker at the START of the
+        // transaction only, not at the end. Entities tracked after the commit can
+        // be in inconsistent states that cause spurious DbUpdateConcurrencyException
+        // when a later SaveChangesAsync flushes them unexpectedly.
+        // After Clear(), GetByIdAsync reloads a guaranteed-Unchanged Order from DB.
+        _unitOfWork.ClearChangeTracker();
+
         var order = await _unitOfWork.Orders.GetByIdAsync(orderResult.Data.Id);
         if (order == null)
         {
             return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse("Order was created but could not be retrieved.");
         }
 
-        order.PaymentReference = effectiveIdempotencyKey;
-        order.PaymentMethod = paymentMethod;
-
-        await _unitOfWork.Orders.UpdateAsync(order);
-        await _unitOfWork.SaveChangesAsync();
-
+        // Audit BEFORE touching order properties.
+        // Reason: setting any property on a tracked EF entity immediately marks it
+        // as Modified via snapshot tracking. AuditService.LogAsync uses the same
+        // DbContext and calls SaveChangesAsync, which would silently save the Modified
+        // order. InitializePaystackForOrderAsync then saves it again → second UPDATE
+        // on the same row → 0 rows affected → DbUpdateConcurrencyException.
+        // Solution: log first (order is Unchanged → only AuditLog is saved), then
+        // let each payment branch own exactly one save of the order.
         await _auditService.LogAsync(
             action: "Checkout.Payment.Created",
             category: "Commerce",
@@ -235,12 +292,14 @@ public class CheckoutService : ICheckoutService
                 orderNumber = order.OrderNumber,
                 total = order.Total,
                 idempotencyKey = effectiveIdempotencyKey,
-                paymentMethod = order.PaymentMethod?.ToString()
+                paymentMethod = paymentMethod.ToString()
             });
 
         if (paymentMethod == PaymentMethod.Paystack)
         {
-            var initResult = await InitializePaystackForOrderAsync(order, userId, effectiveIdempotencyKey, dto.Payment.CallbackUrl);
+            // InitializePaystackForOrderAsync sets PaymentReference + PaymentMethod
+            // and calls SaveChangesAsync exactly once.
+            var initResult = await InitializePaystackForOrderAsync(order, userId, effectiveIdempotencyKey, dto.Payment.CallbackUrl, dto.GuestEmail);
             if (!initResult.Success)
             {
                 return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse(initResult.Message);
@@ -249,6 +308,44 @@ public class CheckoutService : ICheckoutService
             return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
                 BuildPaystackResult(order, initResult, isIdempotent: false),
                 "Paystack payment initialized successfully.");
+        }
+
+        // Non-Paystack: set + save exactly once here. Retry once on concurrency.
+        order.PaymentReference = effectiveIdempotencyKey;
+        order.PaymentMethod = paymentMethod;
+        // Retry loop for optimistic concurrency (up to 3 attempts)
+        var saveAttempts = 0;
+        while (true)
+        {
+            try
+            {
+                await _unitOfWork.Orders.UpdateAsync(order);
+                await _unitOfWork.SaveChangesAsync();
+                break;
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                saveAttempts++;
+                _logger.LogWarning(ex, "Concurrency conflict while saving payment info for order {OrderId}, attempt {Attempt}.", order.Id, saveAttempts);
+
+                if (saveAttempts >= 3)
+                {
+                    return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse("Concurrency error updating order payment. Please retry the request.");
+                }
+
+                // small backoff then reload and retry
+                await Task.Delay(100 * saveAttempts);
+
+                var freshOrder = await _unitOfWork.Orders.GetByIdAsync(order.Id);
+                if (freshOrder == null)
+                {
+                    return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse("Order was created but could not be retrieved after concurrency conflict.");
+                }
+
+                freshOrder.PaymentReference = effectiveIdempotencyKey;
+                freshOrder.PaymentMethod = paymentMethod;
+                order = freshOrder;
+            }
         }
 
         return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
@@ -283,6 +380,8 @@ public class CheckoutService : ICheckoutService
 
         if (order.PaymentStatus == PaymentStatus.Paid)
         {
+            await _projectService.CreateProjectFromOrderAsync(order.Id);
+
             return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
                 new CheckoutPaymentResultDto
                 {
@@ -308,6 +407,11 @@ public class CheckoutService : ICheckoutService
 
         await _unitOfWork.Orders.UpdateAsync(order);
         await _unitOfWork.SaveChangesAsync();
+
+        if (order.PaymentStatus == PaymentStatus.Paid)
+        {
+            await _projectService.CreateProjectFromOrderAsync(order.Id);
+        }
 
         await _auditService.LogAsync(
             action: "Checkout.Payment.Verified",
@@ -340,12 +444,15 @@ public class CheckoutService : ICheckoutService
 
     private async Task<ApiResponse<CheckoutPaymentResultDto>> HandleExistingPaystackOrderAsync(
         TBM.Core.Entities.Orders.Order order,
-        Guid userId,
+        Guid? userId,
         string reference,
-        string? callbackUrl)
+        string? callbackUrl,
+        string? guestEmail)
     {
         if (order.PaymentStatus == PaymentStatus.Paid)
         {
+            await _projectService.CreateProjectFromOrderAsync(order.Id);
+
             return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
                 new CheckoutPaymentResultDto
                 {
@@ -392,6 +499,11 @@ public class CheckoutService : ICheckoutService
             await _unitOfWork.Orders.UpdateAsync(order);
             await _unitOfWork.SaveChangesAsync();
 
+            if (order.PaymentStatus == PaymentStatus.Paid)
+            {
+                await _projectService.CreateProjectFromOrderAsync(order.Id);
+            }
+
             return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
                 new CheckoutPaymentResultDto
                 {
@@ -407,7 +519,7 @@ public class CheckoutService : ICheckoutService
                 });
         }
 
-        var initResult = await InitializePaystackForOrderAsync(order, userId, reference, callbackUrl);
+        var initResult = await InitializePaystackForOrderAsync(order, userId, reference, callbackUrl, guestEmail);
         if (!initResult.Success)
         {
             return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse(initResult.Message);
@@ -420,19 +532,20 @@ public class CheckoutService : ICheckoutService
 
     private async Task<PaystackInitializeResult> InitializePaystackForOrderAsync(
         TBM.Core.Entities.Orders.Order order,
-        Guid userId,
+        Guid? userId,
         string reference,
-        string? callbackUrl)
+        string? callbackUrl,
+        string? guestEmail)
     {
-        var user = await _unitOfWork.Users.GetByIdAsync(userId);
-        if (user == null || string.IsNullOrWhiteSpace(user.Email))
+        var email = await ResolvePaymentEmailAsync(order, userId, guestEmail);
+        if (string.IsNullOrWhiteSpace(email))
         {
             return PaystackInitializeResult.Failure("Unable to resolve user email for Paystack payment.");
         }
 
         var initResult = await _paystackService.InitializeTransactionAsync(new PaystackInitializeRequest
         {
-            Email = user.Email,
+            Email = email,
             Amount = order.Total,
             Reference = reference,
             CallbackUrl = callbackUrl,
@@ -441,7 +554,8 @@ public class CheckoutService : ICheckoutService
             {
                 orderId = order.Id,
                 orderNumber = order.OrderNumber,
-                userId
+                userId,
+                guestEmail = userId.HasValue ? null : email
             }
         });
 
@@ -458,9 +572,41 @@ public class CheckoutService : ICheckoutService
         order.PaymentReference = initResult.Reference;
         order.PaymentMethod = PaymentMethod.Paystack;
 
-        await _unitOfWork.Orders.UpdateAsync(order);
-        await SavePaystackInitializationSnapshotAsync(order, initResult);
-        await _unitOfWork.SaveChangesAsync();
+        // Retry loop for optimistic concurrency (up to 3 attempts)
+        var initAttempts = 0;
+        while (true)
+        {
+            try
+            {
+                await _unitOfWork.Orders.UpdateAsync(order);
+                await SavePaystackInitializationSnapshotAsync(order, initResult);
+                await _unitOfWork.SaveChangesAsync();
+                break;
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                initAttempts++;
+                _logger.LogWarning(ex, "Concurrency conflict while initializing Paystack for order {OrderId}, attempt {Attempt}.", order.Id, initAttempts);
+
+                if (initAttempts >= 3)
+                {
+                    return PaystackInitializeResult.Failure("Concurrency error initializing Paystack for order. Please retry the request.");
+                }
+
+                await Task.Delay(100 * initAttempts);
+
+                var freshOrder = await _unitOfWork.Orders.GetByIdAsync(order.Id);
+                if (freshOrder == null)
+                {
+                    return PaystackInitializeResult.Failure("Order could not be retrieved after concurrency conflict.");
+                }
+
+                freshOrder.PaymentReference = initResult.Reference;
+                freshOrder.PaymentMethod = PaymentMethod.Paystack;
+
+                order = freshOrder;
+            }
+        }
 
         await _auditService.LogAsync(
             action: "Checkout.Payment.PaystackInitialized",
@@ -665,10 +811,27 @@ public class CheckoutService : ICheckoutService
         };
     }
 
-    private static CheckoutDeliveryDto? BuildDelivery(CheckoutDeliveryDto source, CheckoutAddressDto? fallback)
+    private async Task<string?> ResolvePaymentEmailAsync(
+        TBM.Core.Entities.Orders.Order order,
+        Guid? userId,
+        string? guestEmail)
+    {
+        if (userId.HasValue)
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(userId.Value);
+            return user?.Email;
+        }
+
+        return FirstNonEmpty(guestEmail, order.GuestEmail);
+    }
+
+    private static CheckoutDeliveryDto? BuildDelivery(
+        CheckoutDeliveryDto source,
+        CheckoutAddressDto? fallback,
+        string? guestPhone = null)
     {
         var fullName = FirstNonEmpty(source.FullName, fallback?.FullName);
-        var phone = FirstNonEmpty(source.Phone, fallback?.Phone);
+        var phone = FirstNonEmpty(source.Phone, fallback?.Phone, guestPhone);
         var address = FirstNonEmpty(source.Address, fallback?.Street);
         var city = FirstNonEmpty(source.City, fallback?.City);
         var state = FirstNonEmpty(source.State, fallback?.State);
