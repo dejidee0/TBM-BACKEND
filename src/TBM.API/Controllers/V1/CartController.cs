@@ -48,6 +48,7 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart
     /// </summary>
+    [ApiExplorerSettings(IgnoreApi = true)]
     [AllowAnonymous]
     [HttpGet("api/cart")]
     public async Task<IActionResult> GetCartCompatibility()
@@ -91,6 +92,7 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart/add
     /// </summary>
+    [ApiExplorerSettings(IgnoreApi = true)]
     [AllowAnonymous]
     [HttpPost("api/cart/add")]
     public async Task<IActionResult> AddToCartCompatibility([FromBody] AddToCartDto dto)
@@ -135,6 +137,7 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart/items/:itemId
     /// </summary>
+    [ApiExplorerSettings(IgnoreApi = true)]
     [AllowAnonymous]
     [HttpPut("api/cart/items/{itemId:guid}")]
     public async Task<IActionResult> UpdateCartItemCompatibility(Guid itemId, [FromBody] UpdateCartItemDto dto)
@@ -175,6 +178,7 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart/items/:itemId
     /// </summary>
+    [ApiExplorerSettings(IgnoreApi = true)]
     [AllowAnonymous]
     [HttpDelete("api/cart/items/{itemId:guid}")]
     public async Task<IActionResult> RemoveCartItemCompatibility(Guid itemId)
@@ -232,6 +236,7 @@ public class CartController : ControllerBase
     /// <summary>
     /// Compatibility endpoint for frontend route: /api/cart/merge
     /// </summary>
+    [ApiExplorerSettings(IgnoreApi = true)]
     [HttpPost("~/api/v1/cart/merge")]
     public Task<IActionResult> MergeCartCompatibility([FromBody] MergeCartRequestDto dto)
     {

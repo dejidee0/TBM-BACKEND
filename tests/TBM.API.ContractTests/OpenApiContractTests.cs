@@ -50,4 +50,31 @@ public sealed class OpenApiContractTests : IClassFixture<ApiContractFactory>
 
         Assert.True(securitySchemes.TryGetProperty("Bearer", out _));
     }
+
+    [Fact]
+    public async Task SwaggerDocument_Hides_Cart_Compatibility_Aliases()
+    {
+        var response = await _client.GetAsync("/swagger/v1/swagger.json");
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(json);
+
+        var paths = document.RootElement
+            .GetProperty("paths")
+            .EnumerateObject()
+            .Select(x => x.Name.ToLowerInvariant())
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Contains("/api/v1/cart", paths);
+        Assert.Contains("/api/v1/cart/items", paths);
+        Assert.Contains("/api/v1/cart/items/{itemid}", paths);
+        Assert.Contains("/api/v1/cart/merge", paths);
+        Assert.Contains("/api/v1/cart/apply-promo", paths);
+        Assert.Contains("/api/v1/cart/related", paths);
+
+        Assert.DoesNotContain("/api/v1/cart/api/cart", paths);
+        Assert.DoesNotContain("/api/v1/cart/api/cart/add", paths);
+        Assert.DoesNotContain("/api/v1/cart/api/cart/items/{itemid}", paths);
+    }
 }
