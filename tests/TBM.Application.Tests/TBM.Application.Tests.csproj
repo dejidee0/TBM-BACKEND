@@ -14,13 +14,16 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!-- Resolved via NuGet rather than a machine-pinned shared-runtime DLL path
+         (previously hard-coded to AspNetCore 9.0.11) so the suite builds on any
+         machine with the net9.0 SDK. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+    <!-- OrderService.CreateOrderAsync catches DbUpdateConcurrencyException, so the
+         EF Core assembly must be loadable at runtime for tests that exercise it. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="Microsoft.Extensions.Logging.Abstractions">
-      <HintPath>C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\9.0.11\Microsoft.Extensions.Logging.Abstractions.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
     <Reference Include="TBM.Application">
       <HintPath>..\..\src\TBM.Application\bin\$(Configuration)\net9.0\TBM.Application.dll</HintPath>
       <Private>true</Private>

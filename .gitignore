@@ -402,3 +402,5 @@ FodyWeavers.xsd
 .mcp.json
 src/TBM.API/appsettings.Development.json
 src/TBM.API/appsettings.Production.json
+
+TBM.API.publish.zip

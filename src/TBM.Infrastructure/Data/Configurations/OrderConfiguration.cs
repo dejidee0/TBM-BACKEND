@@ -23,6 +23,13 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(o => o.DesignSessionId)
             .IsUnique()
             .HasFilter("[DesignSessionId] IS NOT NULL");
+
+        // Guarantee no two orders can share a payment reference, closing the
+        // duplicate-order race at the database level. Filtered so the many
+        // orders without a reference (NULL or empty) are exempt from uniqueness.
+        builder.HasIndex(o => o.PaymentReference)
+            .IsUnique()
+            .HasFilter("[PaymentReference] IS NOT NULL AND [PaymentReference] <> ''");
         
         builder.Property(o => o.Status)
             .IsRequired()

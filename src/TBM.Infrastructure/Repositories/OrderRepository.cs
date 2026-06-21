@@ -215,16 +215,33 @@ public async Task<List<PaymentDistributionDto>> GetPaymentDistributionAsync()
     
     public Task UpdateAsync(Order order)
     {
-        // Use Entry().State instead of DbSet.Update() to avoid marking loaded navigation
-        // properties (Items, User) as Modified — which causes unnecessary UPDATEs and
-        // triggers spurious DbUpdateConcurrencyException on the Order's RowVersion.
         var entry = _context.Entry(order);
+
         if (entry.State == EntityState.Detached)
         {
-            _context.Attach(order);
+            // Attach the caller's own instance and mark it Modified. We
+            // deliberately KEEP the entity's RowVersion as the concurrency
+            // token's original value, so the generated
+            //   UPDATE ... WHERE Id = @id AND RowVersion = @loadedRowVersion
+            // still performs a genuine optimistic-concurrency check against the
+            // value that was read when the caller loaded the order.
+            //
+            // We must NOT re-read the current RowVersion from the database here:
+            // doing so would make the WHERE clause always match and silently
+            // turn this into a last-write-wins update, allowing concurrent
+            // writers (e.g. a Paystack webhook racing an admin edit) to clobber
+            // each other undetected. A real conflict must surface as a
+            // DbUpdateConcurrencyException so the caller's retry loop can reload
+            // and reapply against the current row.
+            _context.Orders.Attach(order);
+            entry = _context.Entry(order);
             entry.State = EntityState.Modified;
         }
-        // Already tracked (Unchanged or Modified) — EF snapshot tracking detects changes.
+
+        // For an already-tracked entity the change tracker already holds the
+        // RowVersion captured when it was loaded; the SaveChangesAsync override
+        // stamps UpdatedAt. We set it here too so detached updates carry it.
+        entry.Entity.UpdatedAt = DateTime.UtcNow;
         return Task.CompletedTask;
     }
     

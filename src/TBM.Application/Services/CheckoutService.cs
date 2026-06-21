@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -6,6 +8,7 @@ using TBM.Application.DTOs.Common;
 using TBM.Application.DTOs.Orders;
 using TBM.Application.Interfaces;
 using TBM.Application.Services.DesignFlow;
+using TBM.Core.Entities.Orders;
 using TBM.Core.Entities.Payments;
 using TBM.Core.Entities.Users;
 using TBM.Core.Enums;
@@ -166,7 +169,9 @@ public class CheckoutService : ICheckoutService
         string? idempotencyKey = null)
     {
         var paymentMethod = ParsePaymentMethod(dto.Payment.Method) ?? PaymentMethod.Paystack;
-        var effectiveIdempotencyKey = ResolveIdempotencyKey(idempotencyKey, dto) ?? GeneratePaymentReference();
+        var effectiveIdempotencyKey = ResolveIdempotencyKey(idempotencyKey, dto)
+            ?? await BuildDeterministicReferenceAsync(userId, dto.GuestSessionId)
+            ?? GeneratePaymentReference();
         effectiveIdempotencyKey = effectiveIdempotencyKey.Trim();
 
         var existingOrder = await _unitOfWork.Orders.GetByPaymentReferenceAsync(effectiveIdempotencyKey, userId);
@@ -310,42 +315,21 @@ public class CheckoutService : ICheckoutService
                 "Paystack payment initialized successfully.");
         }
 
-        // Non-Paystack: set + save exactly once here. Retry once on concurrency.
-        order.PaymentReference = effectiveIdempotencyKey;
-        order.PaymentMethod = paymentMethod;
-        // Retry loop for optimistic concurrency (up to 3 attempts)
-        var saveAttempts = 0;
-        while (true)
+        try
         {
-            try
-            {
-                await _unitOfWork.Orders.UpdateAsync(order);
-                await _unitOfWork.SaveChangesAsync();
-                break;
-            }
-            catch (DbUpdateConcurrencyException ex)
-            {
-                saveAttempts++;
-                _logger.LogWarning(ex, "Concurrency conflict while saving payment info for order {OrderId}, attempt {Attempt}.", order.Id, saveAttempts);
-
-                if (saveAttempts >= 3)
+            order = await SaveOrderWithConcurrencyRetryAsync(
+                order,
+                freshOrder =>
                 {
-                    return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse("Concurrency error updating order payment. Please retry the request.");
-                }
-
-                // small backoff then reload and retry
-                await Task.Delay(100 * saveAttempts);
-
-                var freshOrder = await _unitOfWork.Orders.GetByIdAsync(order.Id);
-                if (freshOrder == null)
-                {
-                    return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse("Order was created but could not be retrieved after concurrency conflict.");
-                }
-
-                freshOrder.PaymentReference = effectiveIdempotencyKey;
-                freshOrder.PaymentMethod = paymentMethod;
-                order = freshOrder;
-            }
+                    freshOrder.PaymentReference = effectiveIdempotencyKey;
+                    freshOrder.PaymentMethod = paymentMethod;
+                },
+                "saving checkout payment info");
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse(
+                "Concurrency error updating order payment. Please retry the request.");
         }
 
         return ApiResponse<CheckoutPaymentResultDto>.SuccessResponse(
@@ -403,10 +387,10 @@ public class CheckoutService : ICheckoutService
             return ApiResponse<CheckoutPaymentResultDto>.ErrorResponse(verificationResult.Message);
         }
 
-        ApplyVerificationResultToOrder(order, verificationResult);
-
-        await _unitOfWork.Orders.UpdateAsync(order);
-        await _unitOfWork.SaveChangesAsync();
+        order = await SaveOrderWithConcurrencyRetryAsync(
+            order,
+            freshOrder => ApplyVerificationResultToOrder(freshOrder, verificationResult),
+            "verifying Paystack payment");
 
         if (order.PaymentStatus == PaymentStatus.Paid)
         {
@@ -495,9 +479,10 @@ public class CheckoutService : ICheckoutService
         var verifyResult = await _paystackService.VerifyTransactionAsync(reference);
         if (verifyResult.Success && verifyResult.Status.Equals("success", StringComparison.OrdinalIgnoreCase))
         {
-            ApplyVerificationResultToOrder(order, verifyResult);
-            await _unitOfWork.Orders.UpdateAsync(order);
-            await _unitOfWork.SaveChangesAsync();
+            order = await SaveOrderWithConcurrencyRetryAsync(
+                order,
+                freshOrder => ApplyVerificationResultToOrder(freshOrder, verifyResult),
+                "saving existing Paystack order verification");
 
             if (order.PaymentStatus == PaymentStatus.Paid)
             {
@@ -569,43 +554,22 @@ public class CheckoutService : ICheckoutService
             return initResult;
         }
 
-        order.PaymentReference = initResult.Reference;
-        order.PaymentMethod = PaymentMethod.Paystack;
-
-        // Retry loop for optimistic concurrency (up to 3 attempts)
-        var initAttempts = 0;
-        while (true)
+        try
         {
-            try
-            {
-                await _unitOfWork.Orders.UpdateAsync(order);
-                await SavePaystackInitializationSnapshotAsync(order, initResult);
-                await _unitOfWork.SaveChangesAsync();
-                break;
-            }
-            catch (DbUpdateConcurrencyException ex)
-            {
-                initAttempts++;
-                _logger.LogWarning(ex, "Concurrency conflict while initializing Paystack for order {OrderId}, attempt {Attempt}.", order.Id, initAttempts);
-
-                if (initAttempts >= 3)
+            order = await SaveOrderWithConcurrencyRetryAsync(
+                order,
+                freshOrder =>
                 {
-                    return PaystackInitializeResult.Failure("Concurrency error initializing Paystack for order. Please retry the request.");
-                }
-
-                await Task.Delay(100 * initAttempts);
-
-                var freshOrder = await _unitOfWork.Orders.GetByIdAsync(order.Id);
-                if (freshOrder == null)
-                {
-                    return PaystackInitializeResult.Failure("Order could not be retrieved after concurrency conflict.");
-                }
-
-                freshOrder.PaymentReference = initResult.Reference;
-                freshOrder.PaymentMethod = PaymentMethod.Paystack;
-
-                order = freshOrder;
-            }
+                    freshOrder.PaymentReference = initResult.Reference;
+                    freshOrder.PaymentMethod = PaymentMethod.Paystack;
+                },
+                "initializing Paystack for order",
+                freshOrder => SavePaystackInitializationSnapshotAsync(freshOrder, initResult));
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return PaystackInitializeResult.Failure(
+                "Concurrency error initializing Paystack for order. Please retry the request.");
         }
 
         await _auditService.LogAsync(
@@ -659,6 +623,57 @@ public class CheckoutService : ICheckoutService
         existing.Payload = JsonSerializer.Serialize(snapshot);
         existing.Processed = true;
         existing.ProcessedAt = DateTime.UtcNow;
+    }
+
+    private async Task<Order> SaveOrderWithConcurrencyRetryAsync(
+        Order order,
+        Action<Order> applyChanges,
+        string operation,
+        Func<Order, Task>? beforeSave = null,
+        int maxAttempts = 3)
+    {
+        var orderId = order.Id;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            applyChanges(order);
+            order.UpdatedAt = DateTime.UtcNow;
+
+            try
+            {
+                await _unitOfWork.Orders.UpdateAsync(order);
+
+                if (beforeSave != null)
+                {
+                    await beforeSave(order);
+                }
+
+                await _unitOfWork.SaveChangesAsync();
+                return order;
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Concurrency conflict while {Operation} for order {OrderId}, attempt {Attempt}.",
+                    operation,
+                    orderId,
+                    attempt);
+
+                if (attempt >= maxAttempts)
+                {
+                    throw;
+                }
+
+                await Task.Delay(100 * attempt);
+                _unitOfWork.ClearChangeTracker();
+
+                order = await _unitOfWork.Orders.GetByIdAsync(orderId)
+                    ?? throw new InvalidOperationException($"Order {orderId} not found during concurrency retry.");
+            }
+        }
+
+        throw new DbUpdateConcurrencyException($"Concurrency error while {operation} for order {orderId}.");
     }
 
     private static bool TryReadInitializationSnapshot(string payload, out PaystackInitializationSnapshot snapshot)
@@ -790,6 +805,47 @@ public class CheckoutService : ICheckoutService
     private static string GeneratePaymentReference()
     {
         return $"TBM-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}";
+    }
+
+    // When the caller supplies no idempotency key / payment reference, derive a
+    // stable one from the cart owner + cart id + current line items (including
+    // each item's AddedAt). Two rapid submits of the SAME cart then resolve to
+    // the same reference, so the existing-order check returns the first order
+    // instead of creating a duplicate.
+    //
+    // Including AddedAt keeps a genuine re-order distinct: after an order is
+    // placed the cart items are deleted, so re-adding the same products produces
+    // new AddedAt values -> a different reference -> a new order. The previous
+    // behaviour (a random GUID per request) made every retry look like a brand
+    // new payment, which is the duplicate-order hole this closes.
+    //
+    // Returns null when there is no cart to hash; the caller then falls back to a
+    // generated reference and the empty cart is reported downstream.
+    private async Task<string?> BuildDeterministicReferenceAsync(Guid? userId, string? guestSessionId)
+    {
+        var cart = userId.HasValue
+            ? await _unitOfWork.Carts.GetByUserIdAsync(userId.Value)
+            : string.IsNullOrWhiteSpace(guestSessionId)
+                ? null
+                : await _unitOfWork.Carts.GetByGuestSessionIdAsync(guestSessionId.Trim());
+
+        if (cart == null || !cart.Items.Any())
+        {
+            return null;
+        }
+
+        var identity = userId.HasValue
+            ? $"u:{userId.Value}"
+            : $"g:{guestSessionId?.Trim()}";
+
+        var items = string.Join("|", cart.Items
+            .OrderBy(i => i.ProductId)
+            .Select(i => $"{i.ProductId}:{i.Quantity}:{i.UnitPrice}:{i.AddedAt.Ticks}"));
+
+        var raw = $"{identity};cart:{cart.Id};items:{items}";
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
+
+        return $"TBM-CART-{hash[..32]}";
     }
 
     private static PaymentMethod? ParsePaymentMethod(string? method)

@@ -30,6 +30,7 @@ internal sealed class FakeUnitOfWork : IUnitOfWork
     public FakeDesignSessionRepository DesignSessionStore { get; }
     public FakeProjectRepository ProjectStore { get; }
     public FakeOrderRepository OrderStore { get; }
+    public FakeCartRepository CartStore { get; } = new();
 
     public IUserRepository Users => throw new NotSupportedException();
     public IUserAddressRepository UserAddresses => throw new NotSupportedException();
@@ -47,7 +48,7 @@ internal sealed class FakeUnitOfWork : IUnitOfWork
     public ICategoryRepository Categories => throw new NotSupportedException();
     public IProductRepository Products { get; }
     public IProductImageRepository ProductImages => throw new NotSupportedException();
-    public ICartRepository Carts => throw new NotSupportedException();
+    public ICartRepository Carts => CartStore;
     public IOrderRepository Orders { get; }
     public IOrderStatusHistoryRepository OrderStatusHistories => throw new NotSupportedException();
     public IWebhookEventRepository WebhookEvents => throw new NotSupportedException();
@@ -350,6 +351,53 @@ internal sealed class FakeOrderRepository : IOrderRepository
     public Task<int> GetTotalOrdersCountAsync(OrderStatus? status = null) => throw new NotSupportedException();
     public Task<int> GetCountByPaymentStatusAsync(PaymentStatus paymentStatus, DateTime? fromDate = null, DateTime? toDate = null) => throw new NotSupportedException();
     public Task<decimal> GetRevenueByPaymentStatusAsync(PaymentStatus paymentStatus, DateTime? fromDate = null, DateTime? toDate = null) => throw new NotSupportedException();
+}
+
+internal sealed class FakeCartRepository : ICartRepository
+{
+    private readonly Dictionary<Guid, Cart> _carts = new();
+
+    public int ClearCartCallCount { get; private set; }
+
+    public void Seed(Cart cart) => _carts[cart.Id] = cart;
+
+    public Task<Cart?> GetByUserIdAsync(Guid userId)
+        => Task.FromResult(_carts.Values.FirstOrDefault(c => c.UserId == userId));
+
+    public Task<Cart?> GetByGuestSessionIdAsync(string guestSessionId)
+        => Task.FromResult(_carts.Values.FirstOrDefault(c => c.GuestSessionId == guestSessionId));
+
+    public Task<Cart?> GetByIdAsync(Guid id)
+        => Task.FromResult(_carts.TryGetValue(id, out var cart) ? cart : null);
+
+    public Task<Cart> CreateAsync(Cart cart)
+    {
+        _carts[cart.Id] = cart;
+        return Task.FromResult(cart);
+    }
+
+    public Task UpdateAsync(Cart cart)
+    {
+        _carts[cart.Id] = cart;
+        return Task.CompletedTask;
+    }
+
+    public Task ClearCartAsync(Guid cartId)
+    {
+        ClearCartCallCount++;
+        if (_carts.TryGetValue(cartId, out var cart))
+        {
+            cart.Items.Clear();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAsync(Guid id) => throw new NotSupportedException();
+    public Task<CartItem?> GetCartItemAsync(Guid cartId, Guid productId) => throw new NotSupportedException();
+    public Task AddItemAsync(CartItem item) => throw new NotSupportedException();
+    public Task UpdateItemAsync(CartItem item) => throw new NotSupportedException();
+    public Task RemoveItemAsync(Guid itemId) => throw new NotSupportedException();
 }
 
 internal sealed class NoopImageStorageService : IImageStorageService

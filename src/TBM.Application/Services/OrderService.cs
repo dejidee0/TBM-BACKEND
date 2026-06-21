@@ -239,7 +239,14 @@ public class OrderService : IOrderService
                 ShippingCity = dto.ShippingCity,
                 ShippingState = dto.ShippingState,
                 ShippingNotes = dto.ShippingNotes,
-                CustomerNotes = customerNotes
+                CustomerNotes = customerNotes,
+                // Persist the payment reference at creation so a duplicate submit
+                // (same deterministic key) is matched by GetByPaymentReferenceAsync
+                // immediately, rather than only after the payment provider step
+                // sets it later.
+                PaymentReference = string.IsNullOrWhiteSpace(dto.PaymentReference)
+                    ? null
+                    : dto.PaymentReference.Trim()
             };
 
             await _unitOfWork.Orders.CreateAsync(order);
