@@ -3,6 +3,7 @@ using TBM.Application.DTOs.Orders;
 using TBM.Application.DTOs.Products;
 using TBM.Application.Interfaces;
 using TBM.Application.Services.DesignFlow;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TBM.Core.Entities.Orders;
@@ -212,7 +213,56 @@ public class OrderService : IOrderService
                 : $"{customerNotes}{Environment.NewLine}Promo: {dto.PromoCode.Trim().ToUpperInvariant()}";
         }
 
-        var orderId = await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        const int maxOrderNumberAttempts = 3;
+        var orderId = Guid.Empty;
+
+        for (var attempt = 1; attempt <= maxOrderNumberAttempts; attempt++)
+        {
+            try
+            {
+                orderId = await CreateOrderInTransactionAsync(userId, dto, isGuest, cart, designSession, subTotal, shippingCost, tax, discount, total, customerNotes);
+                break;
+            }
+            catch (DbUpdateException ex) when (attempt < maxOrderNumberAttempts && IsOrderNumberUniqueViolation(ex))
+            {
+                _logger.LogWarning(
+                    ex,
+                    "OrderNumber collision on attempt {Attempt} while creating order for {Identifier}; retrying with a new order number.",
+                    attempt,
+                    userId?.ToString() ?? dto.GuestSessionId);
+            }
+        }
+
+        // Reload order with all details
+        var createdOrder = await _unitOfWork.Orders.GetByIdAsync(orderId);
+
+        return ApiResponse<OrderDto>.SuccessResponse(
+            MapOrderToDto(createdOrder!),
+            "Order created successfully"
+        );
+    }
+
+    private static bool IsOrderNumberUniqueViolation(DbUpdateException ex)
+    {
+        return ex.InnerException is SqlException sqlEx
+            && (sqlEx.Number == 2601 || sqlEx.Number == 2627)
+            && sqlEx.Message.Contains("IX_Orders_OrderNumber", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<Guid> CreateOrderInTransactionAsync(
+        Guid? userId,
+        CreateOrderDto dto,
+        bool isGuest,
+        Cart cart,
+        DesignSession? designSession,
+        decimal subTotal,
+        decimal shippingCost,
+        decimal tax,
+        decimal discount,
+        decimal total,
+        string? customerNotes)
+    {
+        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             // Generate order number
             var orderNumber = await _unitOfWork.Orders.GenerateOrderNumberAsync();
@@ -325,16 +375,8 @@ public class OrderService : IOrderService
 
             return order.Id;
         });
-
-        // Reload order with all details
-        var createdOrder = await _unitOfWork.Orders.GetByIdAsync(orderId);
-
-        return ApiResponse<OrderDto>.SuccessResponse(
-            MapOrderToDto(createdOrder!),
-            "Order created successfully"
-        );
     }
-    
+
     public async Task<ApiResponse<OrderDto>> UpdateOrderStatusAsync(Guid orderId, UpdateOrderStatusDto dto)
     {
         var order = await _unitOfWork.Orders.GetByIdAsync(orderId);

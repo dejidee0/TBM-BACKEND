@@ -260,21 +260,17 @@ public async Task<List<PaymentDistributionDto>> GetPaymentDistributionAsync()
     {
         var date = DateTime.UtcNow;
         var prefix = $"ORD{date:yyyyMMdd}";
-        
-        var lastOrder = await _context.Orders
-            .Where(o => o.OrderNumber.StartsWith(prefix))
-            .OrderByDescending(o => o.OrderNumber)
-            .FirstOrDefaultAsync();
-        
-        if (lastOrder == null)
-        {
-            return $"{prefix}0001";
-        }
-        
-        var lastNumber = int.Parse(lastOrder.OrderNumber.Substring(prefix.Length));
-        var newNumber = lastNumber + 1;
-        
-        return $"{prefix}{newNumber:D4}";
+
+        // NEXT VALUE FOR is a single atomic operation in SQL Server, so
+        // concurrent checkouts can never be handed the same value — unlike
+        // the previous read-last-row-then-increment, which raced under
+        // concurrent requests and produced duplicate OrderNumber values that
+        // failed the unique index at INSERT time.
+        var sequenceValue = await _context.Database
+            .SqlQueryRaw<long>("SELECT NEXT VALUE FOR OrderNumberSequence")
+            .FirstAsync();
+
+        return $"{prefix}{sequenceValue:D4}";
     }
     
     public async Task<decimal> GetTotalSalesAsync(DateTime? fromDate = null, DateTime? toDate = null)

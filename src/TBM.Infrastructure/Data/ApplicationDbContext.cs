@@ -103,6 +103,10 @@ public DbSet<ContactMessage> ContactMessages => Set<ContactMessage>();
         modelBuilder.ApplyConfiguration(new OrderItemConfiguration());
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
 
+        // Backs order-number generation with a DB-level atomic counter instead
+        // of a read-last-row-then-increment, which raced under concurrent
+        // checkouts and produced duplicate OrderNumber values.
+        modelBuilder.HasSequence<int>("OrderNumberSequence").StartsAt(1).IncrementsBy(1);
     }
     
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
