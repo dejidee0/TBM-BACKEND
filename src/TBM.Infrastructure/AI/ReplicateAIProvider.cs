@@ -52,9 +52,22 @@ namespace TBM.Infrastructure.AI
             // Keeps architectural structure stable while replacing decor.
             var endpoint = await ResolveEndpointAsync(_settings.ImageModel);
 
+            // Applied to every render regardless of room type (kitchen, living room,
+            // bathroom, bedroom, exterior, etc.) — the caller's own request.Prompt
+            // carries the room-specific ask (e.g. "make my kitchen fine"); this
+            // wraps it in TBM's standard Nigerian-market luxury photography style
+            // so every generation reads as a consistent, on-brand magazine render.
             var designPrompt =
                 $"A completely redesigned and redecorated interior. {request.Prompt}. " +
-                "Photorealistic, high-end interior design, professional architectural photography, 4K.";
+                "Nigerian luxury interior design, contemporary African aesthetic, Lagos Abuja upscale home, " +
+                "warm ambient lighting, premium finishes, natural light. " +
+                "modern finishes, clean contemporary design, comfortable upscale living. " +
+                "photorealistic architectural visualization, professional interior photography, " +
+                "ultra detailed, sharp focus, magazine quality, 8K resolution.";
+
+            var negativePrompt = request.NegativePrompt
+                ?? "cartoonish, unrealistic, blurry, low quality, dark, cluttered, watermarks, "
+                 + "ugly, deformed, noisy, distorted, illustration, painting, sketch";
 
             // adirik/interior-design schema:
             //   image              – source room URL (img2img)
@@ -68,9 +81,7 @@ namespace TBM.Infrastructure.AI
                 {
                     image = request.ImageUrl,
                     prompt = designPrompt,
-                    negative_prompt = request.NegativePrompt
-                        ?? "ugly, deformed, noisy, blurry, low quality, distorted, "
-                         + "unrealistic, cartoon, illustration, painting, sketch",
+                    negative_prompt = negativePrompt,
                     guidance_scale = 15,
                     num_inference_steps = 50,
                     strength = 0.99
@@ -78,9 +89,7 @@ namespace TBM.Infrastructure.AI
                 : (object)new
                 {
                     prompt = designPrompt,
-                    negative_prompt = request.NegativePrompt
-                        ?? "ugly, deformed, noisy, blurry, low quality, distorted, "
-                         + "unrealistic, cartoon, illustration, painting, sketch",
+                    negative_prompt = negativePrompt,
                     guidance_scale = 15,
                     num_inference_steps = 50
                 };
