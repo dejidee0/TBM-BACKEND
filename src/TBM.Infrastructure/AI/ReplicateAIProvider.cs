@@ -22,6 +22,10 @@ namespace TBM.Infrastructure.AI
         private static readonly ConcurrentDictionary<string, ResolvedEndpoint> _endpointCache = new();
         private static readonly SemaphoreSlim _resolveLock = new(1, 1);
 
+        private const string DefaultNegativePrompt =
+            "cartoonish, unrealistic, blurry, low quality, dark, cluttered, watermarks, "
+          + "ugly, deformed, noisy, distorted, illustration, painting, sketch";
+
         public string ProviderName => "Replicate";
 
         public ReplicateAIProvider(
@@ -45,11 +49,10 @@ namespace TBM.Infrastructure.AI
             var isImg2Img = !string.IsNullOrWhiteSpace(request.ImageUrl);
             Console.WriteLine($"[Replicate] Image mode: {(isImg2Img ? "IMG2IMG" : "TXT2IMG")}");
 
-            // Model: adirik/interior-design (community model → version-hash endpoint)
-            // Fine-tuned specifically on room transformation datasets.
-            // Superior prompt adherence for furniture, materials, lighting and
-            // colour palette compared to general-purpose models (flux-dev / SDXL).
-            // Keeps architectural structure stable while replacing decor.
+            // Model is config-driven (AI:Replicate:ImageModel). BuildImageInput picks
+            // the correct Replicate input schema for whichever model is configured
+            // (FLUX.1 Dev, adirik/interior-design, etc.) — switching models back and
+            // forth is a config-only change, no code change required.
             var endpoint = await ResolveEndpointAsync(_settings.ImageModel);
 
             // Applied to every render regardless of room type (kitchen, living room,
@@ -65,36 +68,74 @@ namespace TBM.Infrastructure.AI
                 "photorealistic architectural visualization, professional interior photography, " +
                 "ultra detailed, sharp focus, magazine quality, 8K resolution.";
 
-            var negativePrompt = request.NegativePrompt
-                ?? "cartoonish, unrealistic, blurry, low quality, dark, cluttered, watermarks, "
-                 + "ugly, deformed, noisy, distorted, illustration, painting, sketch";
-
-            // adirik/interior-design schema:
-            //   image              – source room URL (img2img)
-            //   prompt             – design description
-            //   negative_prompt    – what to avoid
-            //   guidance_scale     – 1–20 (15 = strong prompt adherence)
-            //   num_inference_steps– 20–50 (50 = best quality)
-            //   strength           – 0–1 (0.99 = 99 % transformation → clearly different output)
-            object input = isImg2Img
-                ? new
-                {
-                    image = request.ImageUrl,
-                    prompt = designPrompt,
-                    negative_prompt = negativePrompt,
-                    guidance_scale = 15,
-                    num_inference_steps = 50,
-                    strength = 0.99
-                }
-                : (object)new
-                {
-                    prompt = designPrompt,
-                    negative_prompt = negativePrompt,
-                    guidance_scale = 15,
-                    num_inference_steps = 50
-                };
+            var input = BuildImageInput(request, designPrompt);
 
             return await SubmitAndPollAsync(endpoint, input);
+        }
+
+        /// <summary>
+        /// Builds the Replicate "input" payload for the configured image model.
+        /// Each model has its own input schema, so this switches on
+        /// <c>_settings.ImageModel</c> rather than hardcoding one schema —
+        /// changing the config value is enough to switch models.
+        /// </summary>
+        private object BuildImageInput(AIImageRequest request, string enhancedPrompt)
+        {
+            var model = _settings.ImageModel;
+
+            if (model.Contains("flux"))
+            {
+                // FLUX.1 Dev input schema
+                var input = new Dictionary<string, object>
+                {
+                    ["prompt"] = enhancedPrompt,
+                    ["num_inference_steps"] = 28,
+                    ["guidance"] = 3.5,
+                    ["output_format"] = "webp",
+                    ["output_quality"] = 90,
+                    ["go_fast"] = false,
+                    ["megapixels"] = "1",
+                    ["num_outputs"] = 1,
+                    ["aspect_ratio"] = string.IsNullOrWhiteSpace(request.ImageUrl)
+                        ? "16:9"
+                        : "1:1"
+                };
+
+                // img2img mode - only if source image provided
+                if (!string.IsNullOrWhiteSpace(request.ImageUrl))
+                {
+                    input["image"] = request.ImageUrl;
+                    input["strength"] = 0.85;
+                    input["prompt_strength"] = 0.8;
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.NegativePrompt))
+                {
+                    // FLUX doesn't use negative_prompt natively
+                    // append as "avoid:" to the main prompt instead
+                    input["prompt"] = enhancedPrompt +
+                        $" Avoid: {request.NegativePrompt}";
+                }
+
+                return input;
+            }
+
+            // Fallback: adirik/interior-design (existing schema)
+            var adrikInput = new Dictionary<string, object>
+            {
+                ["prompt"] = enhancedPrompt,
+                ["negative_prompt"] = request.NegativePrompt ?? DefaultNegativePrompt,
+                ["guidance_scale"] = 15,
+                ["num_inference_steps"] = 50
+            };
+
+            if (!string.IsNullOrWhiteSpace(request.ImageUrl))
+            {
+                adrikInput["image"] = request.ImageUrl;
+                adrikInput["strength"] = 0.99;
+            }
+
+            return adrikInput;
         }
 
         // ── VIDEO GENERATION ─────────────────────────────────────────────────────
@@ -107,10 +148,9 @@ namespace TBM.Infrastructure.AI
 
             var hasImage = !string.IsNullOrWhiteSpace(request.ImageUrl);
 
-            // Model: kwaivgi/kling-v1.6-standard (officially deployed → model-path endpoint)
-            // 720p @ 30fps, 5 or 10 second clips.
-            // Best-in-class human body motion — ideal for showing workers doing physical tasks.
-            // Parameters: start_image (first frame), duration (5|10), cfg_scale (0–1), negative_prompt.
+            // Model is config-driven (AI:Replicate:VideoModel). BuildVideoInput picks
+            // the correct Replicate input schema for whichever model is configured
+            // (Luma Dream Machine, kwaivgi/kling-v1.6-standard, etc.).
             var endpoint = await ResolveEndpointAsync(_settings.VideoModel);
 
             // User's prompt drives the content. We wrap it with a narrative arc:
@@ -121,28 +161,70 @@ namespace TBM.Infrastructure.AI
                 "The video ends with the completed transformation — a beautifully finished interior revealed. " +
                 "Cinematic camera angles, smooth motion, photorealistic, high quality, 4K.";
 
-            // cfg_scale 0.7 = strong prompt adherence while keeping natural motion.
-            // duration 10 = maximum clip length for richer content.
-            object input = hasImage
-                ? new
-                {
-                    prompt = enrichedPrompt,
-                    start_image = request.ImageUrl,
-                    duration = 10,
-                    cfg_scale = 0.7,
-                    negative_prompt = "blurry, low quality, static, no motion, frozen, duplicate, watermark"
-                }
-                : (object)new
-                {
-                    prompt = enrichedPrompt,
-                    duration = 10,
-                    cfg_scale = 0.7,
-                    aspect_ratio = "16:9",
-                    negative_prompt = "blurry, low quality, static, no motion, frozen, duplicate, watermark"
-                };
+            var input = BuildVideoInput(request, enrichedPrompt);
 
             // Kling v1.6 typically takes 3–4 minutes. 300 × 2s = 10 min max.
             return await SubmitAndPollAsync(endpoint, input, maxAttempts: 300);
+        }
+
+        /// <summary>
+        /// Builds the Replicate "input" payload for the configured video model.
+        /// Each model has its own input schema, so this switches on
+        /// <c>_settings.VideoModel</c> rather than hardcoding one schema —
+        /// changing the config value is enough to switch models.
+        /// </summary>
+        private object BuildVideoInput(AIVideoRequest request, string enhancedPrompt)
+        {
+            var model = _settings.VideoModel;
+            var duration = request.DurationSeconds > 0
+                ? request.DurationSeconds
+                : 5; // fix the bug where duration was hardcoded 10
+
+            if (model.Contains("luma") || model.Contains("dream-machine"))
+            {
+                // Luma Dream Machine input schema
+                var input = new Dictionary<string, object>
+                {
+                    ["prompt"] = enhancedPrompt,
+                    ["loop"] = false,
+                    ["aspect_ratio"] = "16:9"
+                };
+
+                // Luma uses keyframes for image-to-video
+                if (!string.IsNullOrWhiteSpace(request.ImageUrl))
+                {
+                    input["keyframes"] = new
+                    {
+                        frame0 = new
+                        {
+                            type = "image",
+                            url = request.ImageUrl
+                        }
+                    };
+                }
+
+                return input;
+            }
+
+            // Fallback: Kling (existing schema)
+            var klingInput = new Dictionary<string, object>
+            {
+                ["prompt"] = enhancedPrompt,
+                ["duration"] = duration,
+                ["cfg_scale"] = 0.7,
+                ["negative_prompt"] = "low quality, blurry, distorted"
+            };
+
+            if (!string.IsNullOrWhiteSpace(request.ImageUrl))
+            {
+                klingInput["start_image"] = request.ImageUrl;
+            }
+            else
+            {
+                klingInput["aspect_ratio"] = "16:9";
+            }
+
+            return klingInput;
         }
 
         // ── ENDPOINT RESOLUTION ───────────────────────────────────────────────────
