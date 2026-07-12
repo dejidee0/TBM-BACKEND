@@ -107,6 +107,7 @@ public class AIController : ControllerBase
     }
 
     [HttpGet("styles")]
+    [AllowAnonymous]
     public IActionResult GetStyles()
     {
         return Ok(AvailableStyles);
