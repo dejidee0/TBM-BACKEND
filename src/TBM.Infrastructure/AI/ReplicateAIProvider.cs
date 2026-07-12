@@ -26,6 +26,61 @@ namespace TBM.Infrastructure.AI
             "cartoonish, unrealistic, blurry, low quality, dark, cluttered, watermarks, "
           + "ugly, deformed, noisy, distorted, illustration, painting, sketch";
 
+        // Per-style prompt fragments selected via AIImageRequest.Style. Keys match the
+        // IDs returned by GET /api/v1/ai/styles. "afro-minimalism" is the fallback used
+        // when no style (or an unrecognized style) is requested.
+        private static readonly Dictionary<string, string> StylePresets = new()
+        {
+            ["modern"] = "A luxury modern interior with built-in TV media unit, " +
+                "premium white marble accent wall panels, custom beige leather " +
+                "sectional sofa, architectural linear drop ceiling, " +
+                "smart warm lighting, high-end contemporary finishes",
+
+            ["minimalist"] = "A high-end minimalist luxury interior, seamless " +
+                "light grey microcement floor, low profile custom neutral block sofa, " +
+                "minimal hidden spotlights, huge floor-to-ceiling windows, " +
+                "serene and uncluttered, premium quality materials",
+
+            ["wabi-sabi"] = "A luxury wabi-sabi interior design, textured mineral " +
+                "plaster walls, custom rough-cut stone coffee table, organic linen " +
+                "slipcovered sofa, handcrafted ceramic pottery decoration, " +
+                "soft recessed spotlights, imperfect natural beauty",
+
+            ["tropical"] = "A premium tropical modern interior design, high ceilings " +
+                "with exposed heavy teak timber beams, sliding teak wood glass doors " +
+                "opening to greenery and natural light, custom cream sofa, " +
+                "lush indoor plants, warm natural materials",
+
+            ["farmhouse"] = "A classic modern farmhouse interior, premium distressed " +
+                "brick fireplace, white shiplap walls, comfortable white slipcover sofas, " +
+                "exposed reclaimed wood ceiling beams, rustic yet refined",
+
+            ["memphis"] = "A luxury Memphis style interior, bold geometric accent " +
+                "shapes on walls, custom colorful terrazzo floor, curved " +
+                "neon-accented pastel sofa, vibrant and playful luxury",
+
+            ["afro-minimalism"] = "Nigerian luxury Afro-minimalist interior, " +
+                "Aso-Oke upholstered accent chair, iroko hardwood furniture, " +
+                "marble floors, clean lines with Yoruba cultural details, " +
+                "warm amber lighting, bespoke Lagos craftsmanship",
+
+            ["contemporary-african"] = "Contemporary African luxury interior, " +
+                "earth-tone palette with ochre and terracotta, mud cloth " +
+                "upholstery, hand-carved mahogany furniture, woven baskets, " +
+                "brass accents, limewash walls, warm natural light, " +
+                "cultural richness",
+
+            ["industrial"] = "Industrial loft luxury interior, exposed concrete " +
+                "ceiling with structural beams, polished concrete floors, " +
+                "custom steel and leather furniture, warm Edison pendant lighting, " +
+                "raw materials with refined execution",
+
+            ["bohemian"] = "Luxury bohemian interior, layered Persian and " +
+                "Moroccan rugs, jewel-toned velvet cushions and throws, " +
+                "eclectic global art collection, macrame wall hangings, " +
+                "warm candlelit ambient glow, richly textured and curated"
+        };
+
         public string ProviderName => "Replicate";
 
         public ReplicateAIProvider(
@@ -60,15 +115,35 @@ namespace TBM.Infrastructure.AI
             // carries the room-specific ask (e.g. "make my kitchen fine"); this
             // wraps it in TBM's standard Nigerian-market luxury photography style
             // so every generation reads as a consistent, on-brand magazine render.
-            var designPrompt =
-                $"A completely redesigned and redecorated interior. {request.Prompt}. " +
-                "Nigerian luxury interior design, contemporary African aesthetic, Lagos Abuja upscale home, " +
-                "warm ambient lighting, premium finishes, natural light. " +
-                "modern finishes, clean contemporary design, comfortable upscale living. " +
-                "photorealistic architectural visualization, professional interior photography, " +
-                "ultra detailed, sharp focus, magazine quality, 8K resolution.";
+            var userPrompt = request.Prompt;
+            var styleKey = string.IsNullOrWhiteSpace(request.Style)
+                ? "afro-minimalism"
+                : request.Style.Trim().ToLowerInvariant();
+            var styleDescription = StylePresets.TryGetValue(styleKey, out var preset)
+                ? preset
+                : StylePresets["afro-minimalism"];
 
-            var input = BuildImageInput(request, designPrompt);
+            string enhancedPrompt = $@"
+{userPrompt}.
+
+STYLE: {styleDescription}.
+
+LIGHTING: Warm dramatic ambient lighting. Golden hour
+interior glow. Layered lighting with pendant lights and 
+floor lamps.
+
+QUALITY: Photorealistic architectural visualization. 
+Professional interior photography. Sharp focus throughout. 
+8K ultra-detailed. Architectural Digest magazine quality. 
+Award-winning interior design.
+
+AVOID: cartoonish, anime, painting, illustration, 
+watermark, text, logo, blurry, overexposed, 
+generic Western minimalism, IKEA aesthetic, 
+cold blue lighting, white sterile rooms.
+";
+
+            var input = BuildImageInput(request, enhancedPrompt);
 
             return await SubmitAndPollAsync(endpoint, input);
         }
@@ -105,7 +180,7 @@ namespace TBM.Infrastructure.AI
                 if (!string.IsNullOrWhiteSpace(request.ImageUrl))
                 {
                     input["image"] = request.ImageUrl;
-                    input["strength"] = 0.85;
+                    input["strength"] = 0.65;
                     input["prompt_strength"] = 0.8;
                 }
 

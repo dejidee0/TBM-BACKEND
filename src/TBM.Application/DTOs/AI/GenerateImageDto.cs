@@ -10,4 +10,9 @@ public class GenerateImageDto
     /// Predefined categories: Interior Design types, Construction types, Furniture types, Materials.
     /// </summary>
     public List<string>? ContextTags { get; set; }
+    /// <summary>
+    /// Optional style preset ID (see GET /api/v1/ai/styles). Falls back to
+    /// "afro-minimalism" when omitted or unrecognized.
+    /// </summary>
+    public string? Style { get; set; }
 }

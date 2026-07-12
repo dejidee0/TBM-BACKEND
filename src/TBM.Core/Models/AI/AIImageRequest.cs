@@ -4,6 +4,7 @@ namespace TBM.Core.Models.AI
     {
         public string Prompt { get; set; } = default!;
         public string? NegativePrompt { get; set; } // ✅ ADD THIS
+        public string? Style { get; set; }
         public string ImageUrl { get; set; } = default!;
         public int Width { get; set; } = 1024;
         public int Height { get; set; } = 1024;

@@ -110,7 +110,8 @@ public class AIService : IAIService
             var providerResult = await _provider.GenerateImageAsync(new AIImageRequest
             {
                 Prompt = enrichedPrompt,
-                ImageUrl = sourceImageUrl
+                ImageUrl = sourceImageUrl,
+                Style = dto.Style
             });
 
             if (!providerResult.Success || string.IsNullOrWhiteSpace(providerResult.OutputUrl))

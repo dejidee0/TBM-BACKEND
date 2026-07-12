@@ -17,6 +17,20 @@ namespace TBM.API.Controllers.V1.AI;
 [EnableRateLimiting("DynamicPolicy")]
 public class AIController : ControllerBase
 {
+    private static readonly List<AIStyleDto> AvailableStyles = new()
+    {
+        new() { Id = "modern", Name = "Modern" },
+        new() { Id = "minimalist", Name = "Minimalism" },
+        new() { Id = "wabi-sabi", Name = "Wabi-Sabi" },
+        new() { Id = "tropical", Name = "Tropical" },
+        new() { Id = "farmhouse", Name = "Farmhouse" },
+        new() { Id = "memphis", Name = "Memphis" },
+        new() { Id = "afro-minimalism", Name = "Afro-Minimalism" },
+        new() { Id = "contemporary-african", Name = "Contemporary African" },
+        new() { Id = "industrial", Name = "Industrial" },
+        new() { Id = "bohemian", Name = "Bohemian" }
+    };
+
     private readonly IAIService _aiService;
     private readonly AIUsageService _aiUsageService;
     private readonly AICreditService _aiCreditService;
@@ -90,6 +104,12 @@ public class AIController : ControllerBase
                 dto.Prompt ?? string.Empty, dto.ContextTags);
             return result;
         });
+    }
+
+    [HttpGet("styles")]
+    public IActionResult GetStyles()
+    {
+        return Ok(AvailableStyles);
     }
 
     [HttpGet("usage/summary")]
