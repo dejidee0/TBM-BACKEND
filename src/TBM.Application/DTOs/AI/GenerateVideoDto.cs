@@ -11,5 +11,6 @@ namespace TBM.Application.DTOs.AI
         /// Predefined categories: Interior Design types, Construction types, Furniture types, Materials.
         /// </summary>
         public List<string>? ContextTags { get; set; }
+        public string? Style { get; set; }
     }
 }

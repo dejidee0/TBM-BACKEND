@@ -257,10 +257,22 @@ cold blue lighting, white sterile rooms.
 
             if (model.Contains("luma") || model.Contains("dream-machine"))
             {
+                var styleContext = !string.IsNullOrWhiteSpace(request.Style)
+                    && StylePresets.TryGetValue(request.Style.ToLower(), out var preset)
+                    ? preset
+                    : string.Empty;
+
+                var videoPrompt = string.IsNullOrWhiteSpace(styleContext)
+                    ? enhancedPrompt
+                    : $"{styleContext}. Cinematic video: {request.Prompt}. " +
+                      "Slow smooth camera movement, warm ambient lighting, " +
+                      "photorealistic, professional cinematography, " +
+                      "high production value, no text overlays";
+
                 // Luma Dream Machine input schema
                 var input = new Dictionary<string, object>
                 {
-                    ["prompt"] = enhancedPrompt,
+                    ["prompt"] = videoPrompt,
                     ["loop"] = false,
                     ["aspect_ratio"] = "16:9"
                 };

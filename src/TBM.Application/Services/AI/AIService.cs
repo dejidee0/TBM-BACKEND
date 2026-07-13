@@ -202,7 +202,8 @@ public class AIService : IAIService
             {
                 Prompt = enrichedPrompt,
                 ImageUrl = sourceImageUrl,
-                DurationSeconds = durationSeconds
+                DurationSeconds = durationSeconds,
+                Style = dto.Style
             });
 
             if (!providerResult.Success || string.IsNullOrWhiteSpace(providerResult.OutputUrl))

@@ -5,5 +5,6 @@ namespace TBM.Core.Models.AI
         public string Prompt { get; set; } = default!;
         public string ImageUrl { get; set; } = default!;
         public int DurationSeconds { get; set; } = 5;
+        public string? Style { get; set; }
     }
 }
