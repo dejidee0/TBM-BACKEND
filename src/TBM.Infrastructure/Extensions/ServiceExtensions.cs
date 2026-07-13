@@ -60,6 +60,9 @@ public static class ServiceExtensions
         services.AddScoped<IDesignSessionRepository, DesignSessionRepository>();
         services.AddScoped<IBillOfMaterialsRepository, BillOfMaterialsRepository>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
+        services.AddScoped<IInspectionRequestRepository, InspectionRequestRepository>();
+        services.AddScoped<IProjectRequestRepository, ProjectRequestRepository>();
+        services.AddScoped<IInspirationDesignRepository, InspirationDesignRepository>();
 
 
         // Subscription repositories

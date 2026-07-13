@@ -11,6 +11,9 @@ using TBM.Core.Entities.Payments;
 using TBM.Core.Entities.DesignFlow;
 using TBM.Core.Entities.Subscriptions;
 using TBM.Core.Entities.Portfolio;
+using TBM.Core.Entities.Inspections;
+using TBM.Core.Entities.ProjectRequests;
+using TBM.Core.Entities.Inspiration;
 
 
 namespace TBM.Infrastructure.Data;
@@ -75,6 +78,11 @@ public DbSet<ContactMessage> ContactMessages => Set<ContactMessage>();
     // Vendor Portfolio
     public DbSet<VendorPortfolioProject> VendorPortfolioProjects { get; set; }
     public DbSet<PortfolioProjectImage> PortfolioProjectImages { get; set; }
+
+    // Mobile feature entities
+    public DbSet<InspectionRequest> InspectionRequests => Set<InspectionRequest>();
+    public DbSet<ProjectRequest> ProjectRequests => Set<ProjectRequest>();
+    public DbSet<InspirationDesign> InspirationDesigns => Set<InspirationDesign>();
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

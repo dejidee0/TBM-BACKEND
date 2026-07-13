@@ -66,9 +66,19 @@ public class RenovationEstimateResponseDto
     public decimal ContingencyAmount { get; set; }
     public decimal TotalEstimate { get; set; }
     public string Summary { get; set; } = string.Empty;
+    public string Status { get; set; } = "Saved";
     public List<RenovationEstimateLineItemDto> LineItems { get; set; } = new();
     public List<RenovationEstimateSuggestedProductDto> SuggestedProducts { get; set; } = new();
     public List<RenovationEstimateLinkDto> NextSteps { get; set; } = new();
+    public List<PaymentPlanOptionDto> PaymentPlanOptions { get; set; } = new();
+}
+
+public class PaymentPlanOptionDto
+{
+    public string Name { get; set; } = string.Empty;
+    public int Installments { get; set; }
+    public decimal PerInstallment { get; set; }
+    public string Description { get; set; } = string.Empty;
 }
 
 public class RenovationEstimateLineItemDto

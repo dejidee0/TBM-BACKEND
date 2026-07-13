@@ -131,6 +131,7 @@ public class RenovationEstimatorService
             ContingencyAmount = estimate.ContingencyAmount,
             TotalEstimate = estimate.TotalEstimate,
             Summary = estimate.Summary,
+            Status = "Saved",
             LineItems = estimate.LineItems
                 .OrderBy(x => x.CreatedAt)
                 .Select(x => new RenovationEstimateLineItemDto
@@ -154,7 +155,36 @@ public class RenovationEstimatorService
                     Link = x.Link
                 })
                 .ToList(),
-            NextSteps = BuildNextSteps()
+            NextSteps = BuildNextSteps(),
+            PaymentPlanOptions = BuildPaymentPlanOptions(estimate.TotalEstimate)
+        };
+    }
+
+    private static List<PaymentPlanOptionDto> BuildPaymentPlanOptions(decimal totalEstimate)
+    {
+        return new List<PaymentPlanOptionDto>
+        {
+            new()
+            {
+                Name = "Full Payment",
+                Installments = 1,
+                PerInstallment = totalEstimate,
+                Description = "Pay full amount upfront"
+            },
+            new()
+            {
+                Name = "50/50 Plan",
+                Installments = 2,
+                PerInstallment = Round(totalEstimate / 2m),
+                Description = "Pay 50% now, 50% on completion"
+            },
+            new()
+            {
+                Name = "Quarterly Plan",
+                Installments = 4,
+                PerInstallment = Round(totalEstimate / 4m),
+                Description = "Pay in 4 equal installments"
+            }
         };
     }
 

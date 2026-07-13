@@ -21,6 +21,7 @@ public class AIRenovationEstimatorController : ControllerBase
     }
 
     [HttpPost("estimate")]
+    [HttpPost("~/api/v1/ai/renovation-estimates")]
     public async Task<IActionResult> CreateEstimate([FromBody] CreateRenovationEstimateRequestDto request)
     {
         try
@@ -35,6 +36,7 @@ public class AIRenovationEstimatorController : ControllerBase
     }
 
     [HttpGet("estimates")]
+    [HttpGet("~/api/v1/ai/renovation-estimates")]
     public async Task<IActionResult> GetEstimateHistory()
     {
         var estimates = await _estimatorService.GetEstimatesAsync(GetCurrentUserId());
@@ -42,6 +44,7 @@ public class AIRenovationEstimatorController : ControllerBase
     }
 
     [HttpGet("estimates/{estimateId:guid}")]
+    [HttpGet("~/api/v1/ai/renovation-estimates/{estimateId:guid}")]
     public async Task<IActionResult> GetEstimate(Guid estimateId)
     {
         var estimate = await _estimatorService.GetEstimateByIdAsync(GetCurrentUserId(), estimateId);

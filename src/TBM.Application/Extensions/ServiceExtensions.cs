@@ -37,6 +37,10 @@ public static class ServiceExtensions
         services.AddScoped<ProjectService>();
         services.AddScoped<ProjectTimelineService>();
         services.AddScoped<PortfolioService>();
+        services.AddScoped<InspectionService>();
+        services.AddScoped<ProjectRequestService>();
+        services.AddScoped<InspirationService>();
+        services.AddScoped<DocumentUploadService>();
 
         // Subscription services
         services.AddScoped<DiscountEngine>();

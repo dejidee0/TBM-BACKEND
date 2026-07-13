@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TBM.Core.Entities.Products;
 using TBM.Core.Entities.Users;
+using TBM.Core.Entities.Inspiration;
 using TBM.Core.Enums;
 
 namespace TBM.Infrastructure.Data;
@@ -279,6 +280,77 @@ public static class DbInitializer
             };
             
             await context.Products.AddRangeAsync(products);
+            await context.SaveChangesAsync();
+        }
+
+        // Seed Inspiration Designs if they don't exist
+        if (!context.InspirationDesigns.Any())
+        {
+            var inspirationDesigns = new List<InspirationDesign>
+            {
+                new()
+                {
+                    Title = "Lagos Penthouse",
+                    Style = "afro-minimalism",
+                    Category = "Living Room",
+                    ImageUrl = "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=800",
+                    Description = "Aso-Oke accents with marble floors",
+                    IsActive = true,
+                    DisplayOrder = 1
+                },
+                new()
+                {
+                    Title = "Modern Kitchen",
+                    Style = "modern",
+                    Category = "Kitchen",
+                    ImageUrl = "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800",
+                    Description = "Built-in marble island with warm lighting",
+                    IsActive = true,
+                    DisplayOrder = 2
+                },
+                new()
+                {
+                    Title = "Zen Bedroom",
+                    Style = "minimalist",
+                    Category = "Bedroom",
+                    ImageUrl = "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800",
+                    Description = "Microcement floors, floor-to-ceiling windows",
+                    IsActive = true,
+                    DisplayOrder = 3
+                },
+                new()
+                {
+                    Title = "Tropical Retreat",
+                    Style = "tropical",
+                    Category = "Living Room",
+                    ImageUrl = "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800",
+                    Description = "Teak beams with lush indoor palms",
+                    IsActive = true,
+                    DisplayOrder = 4
+                },
+                new()
+                {
+                    Title = "Artisan Bathroom",
+                    Style = "wabi-sabi",
+                    Category = "Bathroom",
+                    ImageUrl = "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800",
+                    Description = "Mineral plaster walls with stone basin",
+                    IsActive = true,
+                    DisplayOrder = 5
+                },
+                new()
+                {
+                    Title = "Industrial Loft",
+                    Style = "industrial",
+                    Category = "Living Room",
+                    ImageUrl = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800",
+                    Description = "Exposed concrete with Edison lighting",
+                    IsActive = true,
+                    DisplayOrder = 6
+                }
+            };
+
+            await context.InspirationDesigns.AddRangeAsync(inspirationDesigns);
             await context.SaveChangesAsync();
         }
     }
