@@ -19,16 +19,16 @@ public class AIController : ControllerBase
 {
     private static readonly List<AIStyleDto> AvailableStyles = new()
     {
-        new() { Id = "modern", Name = "Modern" },
-        new() { Id = "minimalist", Name = "Minimalism" },
-        new() { Id = "wabi-sabi", Name = "Wabi-Sabi" },
-        new() { Id = "tropical", Name = "Tropical" },
-        new() { Id = "farmhouse", Name = "Farmhouse" },
-        new() { Id = "memphis", Name = "Memphis" },
-        new() { Id = "afro-minimalism", Name = "Afro-Minimalism" },
-        new() { Id = "contemporary-african", Name = "Contemporary African" },
-        new() { Id = "industrial", Name = "Industrial" },
-        new() { Id = "bohemian", Name = "Bohemian" }
+        new() { Id = "modern", Name = "Modern", ImageUrl = "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800" },
+        new() { Id = "minimalist", Name = "Minimalism", ImageUrl = "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800" },
+        new() { Id = "wabi-sabi", Name = "Wabi-Sabi", ImageUrl = "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800" },
+        new() { Id = "tropical", Name = "Tropical", ImageUrl = "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800" },
+        new() { Id = "farmhouse", Name = "Farmhouse", ImageUrl = null },
+        new() { Id = "memphis", Name = "Memphis", ImageUrl = null },
+        new() { Id = "afro-minimalism", Name = "Afro-Minimalism", ImageUrl = "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=800" },
+        new() { Id = "contemporary-african", Name = "Contemporary African", ImageUrl = null },
+        new() { Id = "industrial", Name = "Industrial", ImageUrl = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800" },
+        new() { Id = "bohemian", Name = "Bohemian", ImageUrl = null }
     };
 
     private readonly IAIService _aiService;
