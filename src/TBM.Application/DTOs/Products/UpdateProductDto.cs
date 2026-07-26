@@ -23,6 +23,7 @@ public class UpdateProductDto
     
     public string? MetaTitle { get; set; }
     public string? MetaDescription { get; set; }
+    public string? MetaKeywords { get; set; }
     public string? Tags { get; set; }
     public string? AIKeywords { get; set; }
     public string? MaterialType { get; set; }
@@ -42,4 +43,10 @@ public class UpdateProductDto
     public string? InstallationType { get; set; }
     public string? Material { get; set; }
     public string? Color { get; set; }
+    public string? Size { get; set; }
+
+    /// <summary>
+    /// Size variants. When provided, replaces the product's existing variants.
+    /// </summary>
+    public List<CreateProductVariantDto>? Variants { get; set; }
 }

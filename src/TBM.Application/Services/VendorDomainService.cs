@@ -49,7 +49,7 @@ public class VendorDomainService
                 continue;
             }
 
-            if ((product.StockQuantity ?? 0) <= (product.LowStockThreshold ?? 0))
+            if ((product.StockQuantity ?? 0) <= product.LowStockThreshold)
             {
                 lowStockCount++;
             }
@@ -105,7 +105,7 @@ public class VendorDomainService
             }
 
             var stock = product.StockQuantity ?? 0;
-            var threshold = product.LowStockThreshold ?? 0;
+            var threshold = product.LowStockThreshold;
             if (stock <= threshold)
             {
                 alerts.Add(new VendorAlertDto
@@ -533,7 +533,7 @@ public async Task<VendorPagedResultDto<VendorActivityDto>> GetActivityAsync(Guid
             }
 
             var stock = product.StockQuantity;
-            var threshold = product.LowStockThreshold ?? 0;
+            var threshold = product.LowStockThreshold;
             var isLow = product.TrackInventory && (stock ?? 0) <= threshold;
 
             if (lowStockOnly && !isLow)
@@ -602,7 +602,7 @@ public async Task<VendorPagedResultDto<VendorActivityDto>> GetActivityAsync(Guid
             }
 
             var stock = Math.Max(0, product.StockQuantity ?? 0);
-            var threshold = Math.Max(0, product.LowStockThreshold ?? 0);
+            var threshold = Math.Max(0, product.LowStockThreshold);
 
             stats.TotalStockUnits += stock;
 
@@ -758,7 +758,7 @@ public async Task<VendorPagedResultDto<VendorActivityDto>> GetActivityAsync(Guid
             SKU = product.SKU,
             StockQuantity = product.StockQuantity,
             LowStockThreshold = product.LowStockThreshold,
-            IsLowStock = product.TrackInventory && (product.StockQuantity ?? 0) <= (product.LowStockThreshold ?? 0),
+            IsLowStock = product.TrackInventory && (product.StockQuantity ?? 0) <= product.LowStockThreshold,
             IsActive = product.IsActive,
             Price = product.Price
         };
@@ -800,7 +800,7 @@ public async Task<VendorPagedResultDto<VendorActivityDto>> GetActivityAsync(Guid
             SKU = product.SKU,
             StockQuantity = product.StockQuantity,
             LowStockThreshold = product.LowStockThreshold,
-            IsLowStock = product.TrackInventory && (product.StockQuantity ?? 0) <= (product.LowStockThreshold ?? 0),
+            IsLowStock = product.TrackInventory && (product.StockQuantity ?? 0) <= product.LowStockThreshold,
             IsActive = product.IsActive,
             Price = product.Price
         };

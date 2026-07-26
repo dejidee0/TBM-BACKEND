@@ -28,7 +28,9 @@ public class ProductDto
     
     public bool IsActive { get; set; }
     public bool IsFeatured { get; set; }
-    
+    public int DisplayOrder { get; set; }
+    public int LowStockThreshold { get; set; }
+
     public string? Tags { get; set; }
     public string? AIKeywords { get; set; }
     public string? MaterialType { get; set; }
@@ -48,6 +50,9 @@ public class ProductDto
     public string? InstallationType { get; set; }
     public string? Material { get; set; }
     public string? Color { get; set; }
+    public string? Size { get; set; }
+
+    public List<ProductVariantDto> Variants { get; set; } = new();
 
     public List<ProductImageDto> Images { get; set; } = new();
     public string? PrimaryImageUrl { get; set; }

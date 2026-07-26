@@ -21,8 +21,9 @@ public interface IProductService
     Task<ApiResponse<PagedResultDto<ProductDto>>> GetProductsAsync(ProductFilterDto filter);
     Task<ApiResponse<List<ProductDto>>> GetFeaturedProductsAsync(int? brandType = null, int limit = 10);
     Task<ApiResponse<List<ProductDto>>> GetRelatedProductsAsync(Guid productId, int limit = 4);
-    Task<ApiResponse<ProductDto>> CreateProductAsync(CreateProductDto dto);
-    Task<ApiResponse<ProductDto>> UpdateProductAsync(Guid id, UpdateProductDto dto);
+    // Admin responses include the write-only SEO meta fields; public GETs use ProductDto and never return them.
+    Task<ApiResponse<AdminProductDto>> CreateProductAsync(CreateProductDto dto);
+    Task<ApiResponse<AdminProductDto>> UpdateProductAsync(Guid id, UpdateProductDto dto);
     Task<ApiResponse<bool>> DeleteProductAsync(Guid id);
     
     // Product image operations

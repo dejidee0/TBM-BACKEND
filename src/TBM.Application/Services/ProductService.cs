@@ -238,37 +238,37 @@ public class ProductService : IProductService
         return ApiResponse<List<ProductDto>>.SuccessResponse(productDtos);
     }
     
-    public async Task<ApiResponse<ProductDto>> CreateProductAsync(CreateProductDto dto)
+    public async Task<ApiResponse<AdminProductDto>> CreateProductAsync(CreateProductDto dto)
     {
         // Validate enums
         if (!Enum.IsDefined(typeof(BrandType), dto.BrandType))
         {
-            return ApiResponse<ProductDto>.ErrorResponse("Invalid brand type");
+            return ApiResponse<AdminProductDto>.ErrorResponse("Invalid brand type");
         }
-        
+
         if (!Enum.IsDefined(typeof(ProductType), dto.ProductType))
         {
-            return ApiResponse<ProductDto>.ErrorResponse("Invalid product type");
+            return ApiResponse<AdminProductDto>.ErrorResponse("Invalid product type");
         }
-        
+
         // Validate category exists
         var category = await _unitOfWork.Categories.GetByIdAsync(dto.CategoryId);
         if (category == null)
         {
-            return ApiResponse<ProductDto>.ErrorResponse("Category not found");
+            return ApiResponse<AdminProductDto>.ErrorResponse("Category not found");
         }
-        
+
         // Generate slug
         var slug = SlugHelper.GenerateSlug(dto.Name);
         if (await _unitOfWork.Products.SlugExistsAsync(slug))
         {
             slug = $"{slug}-{Guid.NewGuid().ToString("N")[..8]}";
         }
-        
+
         // Check SKU uniqueness
         if (!string.IsNullOrWhiteSpace(dto.SKU) && await _unitOfWork.Products.SKUExistsAsync(dto.SKU))
         {
-            return ApiResponse<ProductDto>.ErrorResponse("SKU already exists");
+            return ApiResponse<AdminProductDto>.ErrorResponse("SKU already exists");
         }
         
         var product = new Product
@@ -285,13 +285,14 @@ public class ProductService : IProductService
             CompareAtPrice = dto.CompareAtPrice,
             ShowPrice = dto.ShowPrice,
             StockQuantity = dto.StockQuantity,
-            LowStockThreshold = dto.LowStockThreshold,
+            LowStockThreshold = dto.LowStockThreshold ?? 5,
             TrackInventory = dto.TrackInventory,
             IsActive = true,
             IsFeatured = dto.IsFeatured,
             DisplayOrder = dto.DisplayOrder,
             MetaTitle = dto.MetaTitle,
             MetaDescription = dto.MetaDescription,
+            MetaKeywords = dto.MetaKeywords,
             Tags = dto.Tags,
             AIKeywords = dto.AIKeywords,
             MaterialType = dto.MaterialType,
@@ -306,35 +307,37 @@ public class ProductService : IProductService
             FinishType = dto.FinishType,
             InstallationType = dto.InstallationType,
             Material = dto.Material,
-            Color = dto.Color
+            Color = dto.Color,
+            Size = dto.Size,
+            Variants = MapVariantsFromDtos(dto.Variants)
         };
 
         await _unitOfWork.Products.CreateAsync(product);
         await _unitOfWork.SaveChangesAsync();
-        
+
         // Reload with navigation properties
         product = await _unitOfWork.Products.GetByIdAsync(product.Id);
-        
-        return ApiResponse<ProductDto>.SuccessResponse(
-            MapProductToDto(product!),
+
+        return ApiResponse<AdminProductDto>.SuccessResponse(
+            MapProductToAdminDto(product!),
             "Product created successfully"
         );
     }
     
-    public async Task<ApiResponse<ProductDto>> UpdateProductAsync(Guid id, UpdateProductDto dto)
+    public async Task<ApiResponse<AdminProductDto>> UpdateProductAsync(Guid id, UpdateProductDto dto)
     {
         var product = await _unitOfWork.Products.GetByIdAsync(id);
-        
+
         if (product == null)
         {
-            return ApiResponse<ProductDto>.ErrorResponse("Product not found");
+            return ApiResponse<AdminProductDto>.ErrorResponse("Product not found");
         }
-        
+
         // Validate category exists
         var category = await _unitOfWork.Categories.GetByIdAsync(dto.CategoryId);
         if (category == null)
         {
-            return ApiResponse<ProductDto>.ErrorResponse("Category not found");
+            return ApiResponse<AdminProductDto>.ErrorResponse("Category not found");
         }
         
         // Update slug if name changed
@@ -349,7 +352,7 @@ public class ProductService : IProductService
         {
             if (await _unitOfWork.Products.SKUExistsAsync(dto.SKU, id))
             {
-                return ApiResponse<ProductDto>.ErrorResponse("SKU already exists");
+                return ApiResponse<AdminProductDto>.ErrorResponse("SKU already exists");
             }
         }
         
@@ -363,13 +366,14 @@ public class ProductService : IProductService
         product.CompareAtPrice = dto.CompareAtPrice;
         product.ShowPrice = dto.ShowPrice;
         product.StockQuantity = dto.StockQuantity;
-        product.LowStockThreshold = dto.LowStockThreshold;
+        product.LowStockThreshold = dto.LowStockThreshold ?? product.LowStockThreshold;
         product.TrackInventory = dto.TrackInventory;
         product.IsActive = dto.IsActive;
         product.IsFeatured = dto.IsFeatured;
         product.DisplayOrder = dto.DisplayOrder;
         product.MetaTitle = dto.MetaTitle;
         product.MetaDescription = dto.MetaDescription;
+        product.MetaKeywords = dto.MetaKeywords;
         product.Tags = dto.Tags;
         product.AIKeywords = dto.AIKeywords;
         product.MaterialType = dto.MaterialType;
@@ -385,15 +389,26 @@ public class ProductService : IProductService
         product.InstallationType = dto.InstallationType;
         product.Material = dto.Material;
         product.Color = dto.Color;
-        
+        product.Size = dto.Size;
+
+        // Replace variants only when the caller supplies them
+        if (dto.Variants != null)
+        {
+            product.Variants.Clear();
+            foreach (var variant in MapVariantsFromDtos(dto.Variants))
+            {
+                product.Variants.Add(variant);
+            }
+        }
+
         await _unitOfWork.Products.UpdateAsync(product);
         await _unitOfWork.SaveChangesAsync();
-        
+
         // Reload with navigation properties
         product = await _unitOfWork.Products.GetByIdAsync(id);
-        
-        return ApiResponse<ProductDto>.SuccessResponse(
-            MapProductToDto(product!),
+
+        return ApiResponse<AdminProductDto>.SuccessResponse(
+            MapProductToAdminDto(product!),
             "Product updated successfully"
         );
     }
@@ -595,18 +610,21 @@ public class ProductService : IProductService
                 CompareAtPrice = dto.CompareAtPrice,
                 ShowPrice = dto.ShowPrice,
                 StockQuantity = dto.StockQuantity,
-                LowStockThreshold = dto.LowStockThreshold,
+                LowStockThreshold = dto.LowStockThreshold ?? 5,
                 TrackInventory = dto.TrackInventory,
                 IsActive = true,
                 IsFeatured = dto.IsFeatured,
                 DisplayOrder = dto.DisplayOrder,
                 MetaTitle = dto.MetaTitle,
                 MetaDescription = dto.MetaDescription,
+                MetaKeywords = dto.MetaKeywords,
                 Tags = dto.Tags,
                 AIKeywords = dto.AIKeywords,
                 MaterialType = dto.MaterialType,
                 QualityTier = dto.QualityTier,
-                RecommendedFor = dto.RecommendedFor
+                RecommendedFor = dto.RecommendedFor,
+                Size = dto.Size,
+                Variants = MapVariantsFromDtos(dto.Variants)
             });
         }
 
@@ -814,7 +832,7 @@ public class ProductService : IProductService
                 CompareAtPrice = record.CompareAtPrice,
                 ShowPrice = record.ShowPrice,
                 StockQuantity = record.StockQuantity,
-                LowStockThreshold = record.LowStockThreshold,
+                LowStockThreshold = record.LowStockThreshold ?? 5,
                 TrackInventory = record.TrackInventory,
                 IsActive = record.IsActive,
                 IsFeatured = record.IsFeatured,
@@ -912,6 +930,8 @@ public class ProductService : IProductService
             TrackInventory = product.TrackInventory,
             IsActive = product.IsActive,
             IsFeatured = product.IsFeatured,
+            DisplayOrder = product.DisplayOrder,
+            LowStockThreshold = product.LowStockThreshold,
             Tags = product.Tags,
             AIKeywords = product.AIKeywords,
             MaterialType = product.MaterialType,
@@ -927,12 +947,69 @@ public class ProductService : IProductService
             InstallationType = product.InstallationType,
             Material = product.Material,
             Color = product.Color,
+            Size = product.Size,
+            Variants = product.Variants
+                .OrderBy(v => v.DisplayOrder)
+                .Select(MapVariantToDto)
+                .ToList(),
             Images = product.Images.Select(MapProductImageToDto).ToList(),
             PrimaryImageUrl = primaryImage?.ImageUrl,
             CreatedAt = product.CreatedAt,
             UpdatedAt = product.UpdatedAt ?? product.CreatedAt  // FIX: Handle nullable UpdatedAt
     };
 }
+    /// <summary>
+    /// Admin mapping: everything the public DTO carries plus the write-only
+    /// SEO meta fields (never exposed on public GET endpoints).
+    /// </summary>
+    private AdminProductDto MapProductToAdminDto(Product product)
+    {
+        var publicDto = MapProductToDto(product);
+        var adminDto = new AdminProductDto
+        {
+            MetaTitle = product.MetaTitle,
+            MetaDescription = product.MetaDescription,
+            MetaKeywords = product.MetaKeywords
+        };
+
+        foreach (var property in typeof(ProductDto).GetProperties().Where(p => p.CanRead && p.CanWrite))
+        {
+            property.SetValue(adminDto, property.GetValue(publicDto));
+        }
+
+        return adminDto;
+    }
+
+    private static ProductVariantDto MapVariantToDto(ProductVariant variant)
+    {
+        return new ProductVariantDto
+        {
+            Id = variant.Id,
+            Size = variant.Size,
+            Price = variant.Price,
+            StockQuantity = variant.StockQuantity,
+            IsActive = variant.IsActive,
+            DisplayOrder = variant.DisplayOrder
+        };
+    }
+
+    private static List<ProductVariant> MapVariantsFromDtos(List<CreateProductVariantDto>? variants)
+    {
+        if (variants == null || variants.Count == 0)
+        {
+            return new List<ProductVariant>();
+        }
+
+        return variants.Select(v => new ProductVariant
+        {
+            Size = v.Size,
+            Price = v.Price,
+            StockQuantity = v.StockQuantity,
+            IsActive = v.IsActive,
+            DisplayOrder = v.DisplayOrder
+        }).ToList();
+    }
+
     private ProductImageDto MapProductImageToDto(ProductImage image)
     {
         return new ProductImageDto

@@ -18,6 +18,30 @@ public class InspectionController : ControllerBase
         _inspectionService = inspectionService;
     }
 
+    [HttpPost("{id:guid}/initialize-payment")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InitializePayment(Guid id, [FromBody] InitializeInspectionPaymentRequestDto dto)
+    {
+        try
+        {
+            var result = await _inspectionService.InitializePaymentAsync(id, dto.Email);
+            if (result == null)
+            {
+                return NotFound(new { success = false, message = "Inspection booking not found." });
+            }
+
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
     [HttpPost("verify-payment")]
     [AllowAnonymous]
     public async Task<IActionResult> VerifyPayment([FromBody] VerifyInspectionPaymentRequestDto dto)
@@ -27,8 +51,16 @@ public class InspectionController : ControllerBase
             return BadRequest(new { success = false, message = "Payment reference is required." });
         }
 
-        var result = await _inspectionService.VerifyPaymentAsync(dto.Reference);
-        return Ok(result);
+        try
+        {
+            var result = await _inspectionService.VerifyPaymentAsync(dto.Reference);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Amount mismatch between what Paystack reports and the server-side fee.
+            return BadRequest(new { success = false, verified = false, message = ex.Message });
+        }
     }
 
     [HttpPost("book")]

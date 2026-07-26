@@ -23,7 +23,7 @@ public class Product : AuditableEntity
     
     // Inventory (mainly for Bogat products)
     public int? StockQuantity { get; set; }
-    public int? LowStockThreshold { get; set; }
+    public int LowStockThreshold { get; set; } = 5;
     public bool TrackInventory { get; set; } = true;
     
     // Status
@@ -34,6 +34,7 @@ public class Product : AuditableEntity
     // SEO & Metadata
     public string? MetaTitle { get; set; }
     public string? MetaDescription { get; set; }
+    public string? MetaKeywords { get; set; }
     public string? Tags { get; set; }
     public string? AIKeywords { get; set; }
     public string? MaterialType { get; set; }
@@ -53,8 +54,10 @@ public class Product : AuditableEntity
     public string? InstallationType { get; set; }
     public string? Material { get; set; }
     public string? Color { get; set; }
+    public string? Size { get; set; }
 
     // Navigation properties
     public Category Category { get; set; } = null!;
     public ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
+    public ICollection<ProductVariant> Variants { get; set; } = new List<ProductVariant>();
 }

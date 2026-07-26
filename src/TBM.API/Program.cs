@@ -374,6 +374,28 @@ app.MapControllers();
 await ApplyDatabaseMigrationsAsync(app);
 
 // ==============================
+// Bogat catalogue seed (one-off, idempotent, all environments)
+// Runs only when Database:SeedBogatCatalog is true — flip the flag,
+// start the app once, then flip it back off.
+// ==============================
+if (app.Configuration.GetValue("Database:SeedBogatCatalog", false))
+{
+    using var scope = app.Services.CreateScope();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    try
+    {
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var seedReport = await TBM.Infrastructure.Data.Seeders.BogatCatalogSeeder.SeedAsync(context);
+        logger.LogInformation("{BogatSeedSummary}", seedReport.Summary());
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Bogat catalogue seeding failed");
+    }
+}
+
+// ==============================
 // Seed DB (Dev only)
 // ==============================
 if (app.Environment.IsDevelopment())

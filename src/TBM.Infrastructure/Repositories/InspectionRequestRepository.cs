@@ -25,4 +25,18 @@ public class InspectionRequestRepository : IInspectionRequestRepository
     {
         return _context.InspectionRequests.FirstOrDefaultAsync(x => x.Id == id);
     }
+
+    public Task<InspectionRequest?> GetByPaymentReferenceAsync(string paymentReference)
+    {
+        return _context.InspectionRequests
+            .Where(x => x.PaymentReference == paymentReference)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task UpdateAsync(InspectionRequest request)
+    {
+        _context.InspectionRequests.Update(request);
+        await _context.SaveChangesAsync();
+    }
 }

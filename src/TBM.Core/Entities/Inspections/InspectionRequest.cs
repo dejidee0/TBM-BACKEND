@@ -17,5 +17,6 @@ public class InspectionRequest : AuditableEntity
     public string? UploadedFileUrlsJson { get; set; }
     public string? PaymentReference { get; set; }
     public bool PaymentVerified { get; set; }
+    public decimal InspectionFee { get; set; }
     public string Status { get; set; } = "Pending";
 }

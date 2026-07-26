@@ -53,6 +53,12 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         
         builder.Property(p => p.MetaDescription)
             .HasMaxLength(500);
+
+        builder.Property(p => p.MetaKeywords)
+            .HasMaxLength(500);
+
+        builder.Property(p => p.Size)
+            .HasMaxLength(50);
         
         builder.Property(p => p.Tags)
             .HasMaxLength(500);
@@ -93,6 +99,12 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.HasMany(p => p.Images)
             .WithOne(i => i.Product)
             .HasForeignKey(i => i.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Relationship with Variants
+        builder.HasMany(p => p.Variants)
+            .WithOne(v => v.Product)
+            .HasForeignKey(v => v.ProductId)
             .OnDelete(DeleteBehavior.Cascade);
         
         // Query filter for soft delete

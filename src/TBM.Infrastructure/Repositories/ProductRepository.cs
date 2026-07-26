@@ -20,14 +20,16 @@ public class ProductRepository : IProductRepository
         return await _context.Products
             .Include(p => p.Category)
             .Include(p => p.Images.OrderBy(i => i.DisplayOrder))
+            .Include(p => p.Variants.OrderBy(v => v.DisplayOrder))
             .FirstOrDefaultAsync(p => p.Id == id);
     }
-    
+
     public async Task<Product?> GetBySlugAsync(string slug)
     {
         return await _context.Products
             .Include(p => p.Category)
             .Include(p => p.Images.OrderBy(i => i.DisplayOrder))
+            .Include(p => p.Variants.OrderBy(v => v.DisplayOrder))
             .FirstOrDefaultAsync(p => p.Slug == slug);
     }
     
@@ -46,6 +48,7 @@ public class ProductRepository : IProductRepository
         var query = _context.Products
             .Include(p => p.Category)
             .Include(p => p.Images.OrderBy(i => i.DisplayOrder))
+            .Include(p => p.Variants.OrderBy(v => v.DisplayOrder))
             .AsQueryable();
         
         if (activeOnly)
@@ -111,6 +114,7 @@ public class ProductRepository : IProductRepository
         var query = _context.Products
             .Include(p => p.Category)
             .Include(p => p.Images.OrderBy(i => i.DisplayOrder))
+            .Include(p => p.Variants.OrderBy(v => v.DisplayOrder))
             .Where(p => p.IsActive && p.IsFeatured);
         
         if (brandType.HasValue)
@@ -132,7 +136,8 @@ public class ProductRepository : IProductRepository
         return await _context.Products
             .Include(p => p.Category)
             .Include(p => p.Images.OrderBy(i => i.DisplayOrder))
-            .Where(p => 
+            .Include(p => p.Variants.OrderBy(v => v.DisplayOrder))
+            .Where(p =>
                 p.Id != productId &&
                 p.IsActive &&
                 (p.CategoryId == product.CategoryId || p.BrandType == product.BrandType)

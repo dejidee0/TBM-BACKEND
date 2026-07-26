@@ -51,6 +51,7 @@ public DbSet<AIUsage> AIUsages => Set<AIUsage>();
     public DbSet<Category> Categories { get; set; }
     public DbSet<Product> Products { get; set; }
     public DbSet<ProductImage> ProductImages { get; set; }
+    public DbSet<ProductVariant> ProductVariants { get; set; }
     
     // Order tables
     public DbSet<Cart> Carts { get; set; }

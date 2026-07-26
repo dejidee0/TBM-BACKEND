@@ -1,5 +1,22 @@
 namespace TBM.Application.DTOs.Inspections;
 
+/// <summary>
+/// Body for POST /api/v1/inspections/{id}/initialize-payment.
+/// The fee is determined server-side — clients never supply an amount.
+/// </summary>
+public class InitializeInspectionPaymentRequestDto
+{
+    public string Email { get; set; } = string.Empty;
+}
+
+public class InitializeInspectionPaymentResponseDto
+{
+    public string? AuthorizationUrl { get; set; }
+    public string? AccessCode { get; set; }
+    public string Reference { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+}
+
 public class VerifyInspectionPaymentRequestDto
 {
     public string Reference { get; set; } = string.Empty;
@@ -12,6 +29,7 @@ public class VerifyInspectionPaymentResponseDto
     public decimal Amount { get; set; }
     public string Reference { get; set; } = string.Empty;
     public DateTime? PaidAt { get; set; }
+    public string? Message { get; set; }
 }
 
 public class BookInspectionRequestDto

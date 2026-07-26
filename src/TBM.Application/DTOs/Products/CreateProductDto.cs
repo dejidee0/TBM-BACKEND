@@ -25,6 +25,7 @@ public class CreateProductDto
     
     public string? MetaTitle { get; set; }
     public string? MetaDescription { get; set; }
+    public string? MetaKeywords { get; set; }
     public string? Tags { get; set; }
     public string? AIKeywords { get; set; }
     public string? MaterialType { get; set; }
@@ -44,4 +45,8 @@ public class CreateProductDto
     public string? InstallationType { get; set; }
     public string? Material { get; set; }
     public string? Color { get; set; }
+    public string? Size { get; set; }
+
+    // Size variants (e.g. 600mm/800mm/1000mm/1200mm)
+    public List<CreateProductVariantDto>? Variants { get; set; }
 }
