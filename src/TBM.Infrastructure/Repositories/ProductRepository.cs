@@ -155,7 +155,14 @@ public class ProductRepository : IProductRepository
     
     public Task UpdateAsync(Product product)
     {
-        _context.Products.Update(product);
+        // Every caller loads the product via GetByIdAsync first, so it is already
+        // tracked — SaveChanges' change detection picks up scalar and navigation
+        // collection edits on its own. Do NOT call DbSet.Update() here: its
+        // graph-wide state inference treats newly-added ProductVariant/ProductImage
+        // children (which already carry a client-generated, non-default Guid Id)
+        // as existing rows needing UPDATE instead of INSERT, producing a spurious
+        // DbUpdateConcurrencyException ("0 rows affected") whenever a caller
+        // replaces the Variants or Images collection.
         return Task.CompletedTask;
     }
     
