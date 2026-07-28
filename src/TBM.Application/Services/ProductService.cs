@@ -279,8 +279,10 @@ public class ProductService : IProductService
             return ApiResponse<AdminProductDto>.ErrorResponse("SKU already exists");
         }
         
+        var newProductId = Guid.NewGuid();
         var product = new Product
         {
+            Id = newProductId,
             Name = dto.Name,
             Description = dto.Description,
             ShortDescription = dto.ShortDescription,
@@ -317,8 +319,8 @@ public class ProductService : IProductService
             Material = dto.Material,
             Color = dto.Color,
             Size = dto.Size,
-            Variants = MapVariantsFromDtos(dto.Variants),
-            Images = MapImagesFromDtos(dto.Images)
+            Variants = MapVariantsFromDtos(dto.Variants, newProductId),
+            Images = MapImagesFromDtos(dto.Images, newProductId)
         };
 
         await _unitOfWork.Products.CreateAsync(product);
@@ -404,7 +406,7 @@ public class ProductService : IProductService
         if (dto.Variants != null)
         {
             product.Variants.Clear();
-            foreach (var variant in MapVariantsFromDtos(dto.Variants))
+            foreach (var variant in MapVariantsFromDtos(dto.Variants, product.Id))
             {
                 product.Variants.Add(variant);
             }
@@ -414,7 +416,7 @@ public class ProductService : IProductService
         if (dto.Images != null)
         {
             product.Images.Clear();
-            foreach (var image in MapImagesFromDtos(dto.Images))
+            foreach (var image in MapImagesFromDtos(dto.Images, product.Id))
             {
                 product.Images.Add(image);
             }
@@ -615,8 +617,10 @@ public class ProductService : IProductService
             if (await _unitOfWork.Products.SlugExistsAsync(slug))
                 slug = $"{slug}-{Guid.NewGuid().ToString("N")[..8]}";
 
+            var newProductId = Guid.NewGuid();
             toInsert.Add(new Product
             {
+                Id = newProductId,
                 Name = dto.Name,
                 Description = dto.Description,
                 ShortDescription = dto.ShortDescription,
@@ -643,8 +647,8 @@ public class ProductService : IProductService
                 QualityTier = dto.QualityTier,
                 RecommendedFor = dto.RecommendedFor,
                 Size = dto.Size,
-                Variants = MapVariantsFromDtos(dto.Variants),
-                Images = MapImagesFromDtos(dto.Images)
+                Variants = MapVariantsFromDtos(dto.Variants, newProductId),
+                Images = MapImagesFromDtos(dto.Images, newProductId)
             });
         }
 
@@ -756,7 +760,7 @@ public class ProductService : IProductService
             if (dto.Variants != null)
             {
                 product.Variants.Clear();
-                foreach (var variant in MapVariantsFromDtos(dto.Variants))
+                foreach (var variant in MapVariantsFromDtos(dto.Variants, product.Id))
                 {
                     product.Variants.Add(variant);
                 }
@@ -765,7 +769,7 @@ public class ProductService : IProductService
             if (dto.Images != null)
             {
                 product.Images.Clear();
-                foreach (var image in MapImagesFromDtos(dto.Images))
+                foreach (var image in MapImagesFromDtos(dto.Images, product.Id))
                 {
                     product.Images.Add(image);
                 }
@@ -1156,15 +1160,18 @@ public class ProductService : IProductService
         };
     }
 
-    private static List<ProductVariant> MapVariantsFromDtos(List<CreateProductVariantDto>? variants)
+    private static List<ProductVariant> MapVariantsFromDtos(List<CreateProductVariantDto>? variants, Guid productId = default)
     {
         if (variants == null || variants.Count == 0)
         {
             return new List<ProductVariant>();
         }
 
+        // ProductId is set explicitly (matching AddProductImageAsync's proven pattern)
+        // rather than relying on EF relationship fixup from the collection navigation.
         return variants.Select(v => new ProductVariant
         {
+            ProductId = productId,
             Size = v.Size,
             Price = v.Price,
             StockQuantity = v.StockQuantity,
@@ -1173,7 +1180,7 @@ public class ProductService : IProductService
         }).ToList();
     }
 
-    private static List<ProductImage> MapImagesFromDtos(List<AddProductImageDto>? images)
+    private static List<ProductImage> MapImagesFromDtos(List<AddProductImageDto>? images, Guid productId = default)
     {
         if (images == null || images.Count == 0)
         {
@@ -1182,6 +1189,7 @@ public class ProductService : IProductService
 
         return images.Select(i => new ProductImage
         {
+            ProductId = productId,
             ImageUrl = i.ImageUrl,
             AltText = i.AltText,
             ViewType = i.ViewType,
