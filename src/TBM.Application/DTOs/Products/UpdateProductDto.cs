@@ -49,4 +49,9 @@ public class UpdateProductDto
     /// Size variants. When provided, replaces the product's existing variants.
     /// </summary>
     public List<CreateProductVariantDto>? Variants { get; set; }
+
+    /// <summary>
+    /// Gallery images. When provided, replaces the product's existing images.
+    /// </summary>
+    public List<AddProductImageDto>? Images { get; set; }
 }

@@ -32,40 +32,44 @@ public class ProductService : IProductService
         {
             return ApiResponse<CategoryDto>.ErrorResponse("Category not found");
         }
-        
-        return ApiResponse<CategoryDto>.SuccessResponse(MapCategoryToDto(category));
+
+        var counts = await GetProductCountsAsync(category);
+        return ApiResponse<CategoryDto>.SuccessResponse(MapCategoryToDto(category, counts));
     }
-    
+
     public async Task<ApiResponse<CategoryDto>> GetCategoryBySlugAsync(string slug)
     {
         var category = await _unitOfWork.Categories.GetBySlugAsync(slug);
-        
+
         if (category == null)
         {
             return ApiResponse<CategoryDto>.ErrorResponse("Category not found");
         }
-        
-        return ApiResponse<CategoryDto>.SuccessResponse(MapCategoryToDto(category));
+
+        var counts = await GetProductCountsAsync(category);
+        return ApiResponse<CategoryDto>.SuccessResponse(MapCategoryToDto(category, counts));
     }
-    
+
     public async Task<ApiResponse<List<CategoryDto>>> GetAllCategoriesAsync()
     {
-        var categories = await _unitOfWork.Categories.GetAllAsync();
-        var categoryDtos = categories.Select(MapCategoryToDto).ToList();
-        
+        var categories = (await _unitOfWork.Categories.GetAllAsync()).ToList();
+        var counts = await GetProductCountsAsync(categories.ToArray());
+        var categoryDtos = categories.Select(c => MapCategoryToDto(c, counts)).ToList();
+
         return ApiResponse<List<CategoryDto>>.SuccessResponse(categoryDtos);
     }
-    
+
     public async Task<ApiResponse<List<CategoryDto>>> GetCategoriesByBrandAsync(int brandType)
     {
         if (!Enum.IsDefined(typeof(BrandType), brandType))
         {
             return ApiResponse<List<CategoryDto>>.ErrorResponse("Invalid brand type");
         }
-        
-        var categories = await _unitOfWork.Categories.GetByBrandAsync((BrandType)brandType);
-        var categoryDtos = categories.Select(MapCategoryToDto).ToList();
-        
+
+        var categories = (await _unitOfWork.Categories.GetByBrandAsync((BrandType)brandType)).ToList();
+        var counts = await GetProductCountsAsync(categories.ToArray());
+        var categoryDtos = categories.Select(c => MapCategoryToDto(c, counts)).ToList();
+
         return ApiResponse<List<CategoryDto>>.SuccessResponse(categoryDtos);
     }
     
@@ -94,15 +98,17 @@ public class ProductService : IProductService
             BrandType = (BrandType)dto.BrandType,
             ParentCategoryId = dto.ParentCategoryId,
             ImageUrl = dto.ImageUrl,
+            IconUrl = dto.IconUrl,
             DisplayOrder = dto.DisplayOrder,
             IsActive = true
         };
-        
+
         await _unitOfWork.Categories.CreateAsync(category);
         await _unitOfWork.SaveChangesAsync();
-        
+
+        var counts = await GetProductCountsAsync(category);
         return ApiResponse<CategoryDto>.SuccessResponse(
-            MapCategoryToDto(category),
+            MapCategoryToDto(category, counts),
             "Category created successfully"
         );
     }
@@ -128,14 +134,16 @@ public class ProductService : IProductService
         category.Slug = slug;
         category.ParentCategoryId = dto.ParentCategoryId;
         category.ImageUrl = dto.ImageUrl;
+        category.IconUrl = dto.IconUrl;
         category.DisplayOrder = dto.DisplayOrder;
         category.IsActive = dto.IsActive;
-        
+
         await _unitOfWork.Categories.UpdateAsync(category);
         await _unitOfWork.SaveChangesAsync();
-        
+
+        var counts = await GetProductCountsAsync(category);
         return ApiResponse<CategoryDto>.SuccessResponse(
-            MapCategoryToDto(category),
+            MapCategoryToDto(category, counts),
             "Category updated successfully"
         );
     }
@@ -309,7 +317,8 @@ public class ProductService : IProductService
             Material = dto.Material,
             Color = dto.Color,
             Size = dto.Size,
-            Variants = MapVariantsFromDtos(dto.Variants)
+            Variants = MapVariantsFromDtos(dto.Variants),
+            Images = MapImagesFromDtos(dto.Images)
         };
 
         await _unitOfWork.Products.CreateAsync(product);
@@ -398,6 +407,16 @@ public class ProductService : IProductService
             foreach (var variant in MapVariantsFromDtos(dto.Variants))
             {
                 product.Variants.Add(variant);
+            }
+        }
+
+        // Replace images only when the caller supplies them
+        if (dto.Images != null)
+        {
+            product.Images.Clear();
+            foreach (var image in MapImagesFromDtos(dto.Images))
+            {
+                product.Images.Add(image);
             }
         }
 
@@ -624,7 +643,8 @@ public class ProductService : IProductService
                 QualityTier = dto.QualityTier,
                 RecommendedFor = dto.RecommendedFor,
                 Size = dto.Size,
-                Variants = MapVariantsFromDtos(dto.Variants)
+                Variants = MapVariantsFromDtos(dto.Variants),
+                Images = MapImagesFromDtos(dto.Images)
             });
         }
 
@@ -641,6 +661,131 @@ public class ProductService : IProductService
         return ApiResponse<BulkCreateProductResultDto>.SuccessResponse(
             result,
             $"{result.Created} product(s) created, {result.Failed} failed.");
+    }
+
+    public async Task<ApiResponse<BulkUpdateProductResultDto>> BulkUpdateProductsAsync(
+        List<BulkUpdateProductItemDto> items)
+    {
+        var result = new BulkUpdateProductResultDto { TotalSubmitted = items.Count };
+        var updated = new List<Product>();
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var dto = items[i];
+
+            var product = await _unitOfWork.Products.GetByIdAsync(dto.Id);
+            if (product == null)
+            {
+                result.Skipped++;
+                result.Failures.Add(new BulkProductFailureDto
+                {
+                    Index = i,
+                    ProductName = dto.Name,
+                    Reason = $"Product {dto.Id} not found"
+                });
+                continue;
+            }
+
+            var category = await _unitOfWork.Categories.GetByIdAsync(dto.CategoryId);
+            if (category == null)
+            {
+                result.Skipped++;
+                result.Failures.Add(new BulkProductFailureDto
+                {
+                    Index = i,
+                    ProductName = dto.Name,
+                    Reason = $"Category {dto.CategoryId} not found"
+                });
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.SKU) && dto.SKU != product.SKU
+                && await _unitOfWork.Products.SKUExistsAsync(dto.SKU, dto.Id))
+            {
+                result.Skipped++;
+                result.Failures.Add(new BulkProductFailureDto
+                {
+                    Index = i,
+                    ProductName = dto.Name,
+                    Reason = $"SKU '{dto.SKU}' already exists"
+                });
+                continue;
+            }
+
+            var slug = SlugHelper.GenerateSlug(dto.Name);
+            if (slug != product.Slug && await _unitOfWork.Products.SlugExistsAsync(slug, dto.Id))
+            {
+                slug = $"{slug}-{Guid.NewGuid().ToString("N")[..8]}";
+            }
+
+            product.Name = dto.Name;
+            product.Description = dto.Description;
+            product.ShortDescription = dto.ShortDescription;
+            product.Slug = slug;
+            product.SKU = dto.SKU;
+            product.CategoryId = dto.CategoryId;
+            product.Price = dto.Price;
+            product.CompareAtPrice = dto.CompareAtPrice;
+            product.ShowPrice = dto.ShowPrice;
+            product.StockQuantity = dto.StockQuantity;
+            product.LowStockThreshold = dto.LowStockThreshold ?? product.LowStockThreshold;
+            product.TrackInventory = dto.TrackInventory;
+            product.IsActive = dto.IsActive;
+            product.IsFeatured = dto.IsFeatured;
+            product.DisplayOrder = dto.DisplayOrder;
+            product.MetaTitle = dto.MetaTitle;
+            product.MetaDescription = dto.MetaDescription;
+            product.MetaKeywords = dto.MetaKeywords;
+            product.Tags = dto.Tags;
+            product.AIKeywords = dto.AIKeywords;
+            product.MaterialType = dto.MaterialType;
+            product.QualityTier = dto.QualityTier;
+            product.RecommendedFor = dto.RecommendedFor;
+            product.Specifications = SerializeJson(dto.Specifications);
+            product.KeyFeatures = SerializeJson(dto.KeyFeatures);
+            product.WhatsIncluded = SerializeJson(dto.WhatsIncluded);
+            product.WhatsNotIncluded = SerializeJson(dto.WhatsNotIncluded);
+            product.Dimensions = dto.Dimensions;
+            product.Warranty = dto.Warranty;
+            product.FinishType = dto.FinishType;
+            product.InstallationType = dto.InstallationType;
+            product.Material = dto.Material;
+            product.Color = dto.Color;
+            product.Size = dto.Size;
+
+            if (dto.Variants != null)
+            {
+                product.Variants.Clear();
+                foreach (var variant in MapVariantsFromDtos(dto.Variants))
+                {
+                    product.Variants.Add(variant);
+                }
+            }
+
+            if (dto.Images != null)
+            {
+                product.Images.Clear();
+                foreach (var image in MapImagesFromDtos(dto.Images))
+                {
+                    product.Images.Add(image);
+                }
+            }
+
+            await _unitOfWork.Products.UpdateAsync(product);
+            updated.Add(product);
+        }
+
+        if (updated.Count > 0)
+        {
+            await _unitOfWork.SaveChangesAsync();
+            result.UpdatedProducts = updated.Select(MapProductToDto).ToList();
+        }
+
+        result.Updated = result.UpdatedProducts.Count;
+
+        return ApiResponse<BulkUpdateProductResultDto>.SuccessResponse(
+            result,
+            $"{result.Updated} product(s) updated, {result.Skipped} skipped.");
     }
 
     #endregion
@@ -881,7 +1026,24 @@ public class ProductService : IProductService
 
     #region Helper Methods
     
-    private CategoryDto MapCategoryToDto(Category category)
+    private static IEnumerable<Guid> CollectCategoryIds(IEnumerable<Category> categories)
+    {
+        foreach (var category in categories)
+        {
+            yield return category.Id;
+            foreach (var id in CollectCategoryIds(category.SubCategories))
+            {
+                yield return id;
+            }
+        }
+    }
+
+    private async Task<Dictionary<Guid, int>> GetProductCountsAsync(params Category[] categories)
+    {
+        return await _unitOfWork.Products.GetActiveProductCountsAsync(CollectCategoryIds(categories));
+    }
+
+    private CategoryDto MapCategoryToDto(Category category, IReadOnlyDictionary<Guid, int> productCounts)
     {
         return new CategoryDto
         {
@@ -894,10 +1056,11 @@ public class ProductService : IProductService
             ParentCategoryId = category.ParentCategoryId,
             ParentCategoryName = category.ParentCategory?.Name,
             ImageUrl = category.ImageUrl,
+            IconUrl = category.IconUrl,
             DisplayOrder = category.DisplayOrder,
             IsActive = category.IsActive,
-            SubCategories = category.SubCategories.Select(MapCategoryToDto).ToList(),
-            ProductCount = category.Products.Count
+            SubCategories = category.SubCategories.Select(sc => MapCategoryToDto(sc, productCounts)).ToList(),
+            ProductCount = productCounts.TryGetValue(category.Id, out var count) ? count : 0
         };
     }
     
@@ -1007,6 +1170,23 @@ public class ProductService : IProductService
             StockQuantity = v.StockQuantity,
             IsActive = v.IsActive,
             DisplayOrder = v.DisplayOrder
+        }).ToList();
+    }
+
+    private static List<ProductImage> MapImagesFromDtos(List<AddProductImageDto>? images)
+    {
+        if (images == null || images.Count == 0)
+        {
+            return new List<ProductImage>();
+        }
+
+        return images.Select(i => new ProductImage
+        {
+            ImageUrl = i.ImageUrl,
+            AltText = i.AltText,
+            ViewType = i.ViewType,
+            DisplayOrder = i.DisplayOrder,
+            IsPrimary = i.IsPrimary
         }).ToList();
     }
 

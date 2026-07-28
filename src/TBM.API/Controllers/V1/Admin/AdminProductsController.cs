@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using TBM.Application.DTOs.Products;
 using TBM.Application.Interfaces;
+using TBM.Core.Interfaces.Services;
 
 namespace TBM.API.Controllers.V1.Admin;
 
@@ -10,11 +11,25 @@ namespace TBM.API.Controllers.V1.Admin;
 /// </summary>
 public class AdminProductsController : BaseAdminController
 {
-    private readonly IProductService _productService;
+    private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".webp"
+    };
 
-    public AdminProductsController(IProductService productService)
+    private static readonly HashSet<string> AllowedImageContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/jpeg", "image/png", "image/webp"
+    };
+
+    private const long MaxImageSizeBytes = 10 * 1024 * 1024; // 10 MB
+
+    private readonly IProductService _productService;
+    private readonly IImageStorageService _imageStorageService;
+
+    public AdminProductsController(IProductService productService, IImageStorageService imageStorageService)
     {
         _productService = productService;
+        _imageStorageService = imageStorageService;
     }
 
     /// <summary>
@@ -56,6 +71,24 @@ public class AdminProductsController : BaseAdminController
             return BadRequest(new { success = false, message = "Maximum 500 products per bulk upload." });
 
         var result = await _productService.BulkCreateProductsAsync(products);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Bulk-update multiple existing Bogat inventory products in a single request,
+    /// matched by Id. Items whose Id, CategoryId, or SKU don't resolve are skipped
+    /// and reported — the rest of the batch still applies.
+    /// </summary>
+    [HttpPut("bulk")]
+    public async Task<IActionResult> BulkUpdate([FromBody] List<BulkUpdateProductItemDto> products)
+    {
+        if (products == null || products.Count == 0)
+            return BadRequest(new { success = false, message = "Product list cannot be empty." });
+
+        if (products.Count > 500)
+            return BadRequest(new { success = false, message = "Maximum 500 products per bulk update." });
+
+        var result = await _productService.BulkUpdateProductsAsync(products);
         return Ok(result);
     }
 
@@ -104,6 +137,72 @@ public class AdminProductsController : BaseAdminController
         var result = await _productService.AddProductImageAsync(id, dto);
         if (!result.Success)
             return BadRequest(result);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Upload an image file directly to a product: uploads to Cloudinary and
+    /// attaches the resulting URL as a product image in a single call.
+    /// </summary>
+    [HttpPost("{productId:guid}/images/upload")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxImageSizeBytes)]
+    public async Task<IActionResult> UploadImage(
+        Guid productId,
+        IFormFile file,
+        [FromQuery] bool isPrimary = false,
+        [FromQuery] int displayOrder = 0,
+        [FromQuery] string? altText = null)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { success = false, message = "An image file is required." });
+
+        if (file.Length > MaxImageSizeBytes)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = $"Image file is too large ({file.Length / 1024 / 1024.0:F1} MB). Maximum allowed size is 10 MB.",
+                maxSizeMb = 10
+            });
+        }
+
+        var extension = Path.GetExtension(file.FileName);
+        var hasAllowedExtension = !string.IsNullOrEmpty(extension) && AllowedImageExtensions.Contains(extension);
+        var hasAllowedContentType = !string.IsNullOrEmpty(file.ContentType) && AllowedImageContentTypes.Contains(file.ContentType);
+
+        if (!hasAllowedExtension || !hasAllowedContentType)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = "Invalid image format. Only JPG, PNG, and WEBP files are allowed."
+            });
+        }
+
+        string imageUrl;
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            imageUrl = await _imageStorageService.UploadProductImageAsync(stream, file.FileName, productId.ToString(), file.ContentType);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Failed to upload image.", error = ex.Message });
+        }
+
+        var dto = new AddProductImageDto
+        {
+            ImageUrl = imageUrl,
+            AltText = altText,
+            DisplayOrder = displayOrder,
+            IsPrimary = isPrimary
+        };
+
+        var result = await _productService.AddProductImageAsync(productId, dto);
+        if (!result.Success)
+            return BadRequest(result);
+
         return Ok(result);
     }
 

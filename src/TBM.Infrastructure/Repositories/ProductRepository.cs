@@ -280,4 +280,19 @@ public class ProductRepository : IProductRepository
         await _context.Products.AddRangeAsync(list);
         return list;
     }
+
+    public async Task<Dictionary<Guid, int>> GetActiveProductCountsAsync(IEnumerable<Guid> categoryIds)
+    {
+        var ids = categoryIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, int>();
+        }
+
+        return await _context.Products
+            .Where(p => p.IsActive && ids.Contains(p.CategoryId))
+            .GroupBy(p => p.CategoryId)
+            .Select(g => new { CategoryId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.CategoryId, x => x.Count);
+    }
 }

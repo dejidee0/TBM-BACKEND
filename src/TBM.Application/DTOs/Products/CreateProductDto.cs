@@ -49,4 +49,7 @@ public class CreateProductDto
 
     // Size variants (e.g. 600mm/800mm/1000mm/1200mm)
     public List<CreateProductVariantDto>? Variants { get; set; }
+
+    // Gallery images. PrimaryImageUrl/Images on the response are derived from this.
+    public List<AddProductImageDto>? Images { get; set; }
 }

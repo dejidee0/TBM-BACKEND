@@ -32,6 +32,9 @@ public class CategoryConfiguration : IEntityTypeConfiguration<Category>
         
         builder.Property(c => c.ImageUrl)
             .HasMaxLength(500);
+
+        builder.Property(c => c.IconUrl)
+            .HasMaxLength(500);
         
         // Self-referencing relationship for parent-child categories
         builder.HasOne(c => c.ParentCategory)

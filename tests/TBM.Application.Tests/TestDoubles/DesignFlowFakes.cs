@@ -117,6 +117,7 @@ internal sealed class FakeProductRepository : IProductRepository
     public Task DeleteAsync(Guid id) => throw new NotSupportedException();
     public Task<bool> SlugExistsAsync(string slug, Guid? excludeId = null) => throw new NotSupportedException();
     public Task<bool> SKUExistsAsync(string sku, Guid? excludeId = null) => throw new NotSupportedException();
+    public Task<Dictionary<Guid, int>> GetActiveProductCountsAsync(IEnumerable<Guid> categoryIds) => throw new NotSupportedException();
 
     public Task<List<Product>> GetInventoryCandidatesAsync()
         => Task.FromResult(InventoryCandidates.ToList());

@@ -31,4 +31,10 @@ public interface IProductRepository
     Task<int> UpdateStockAtomicAsync(Guid productId, int quantityToSubtract);
     Task<List<Product>> SearchByAIKeywordsAsync(IEnumerable<string> keywords, int limit = 8);
     Task<List<Product>> BulkCreateAsync(IEnumerable<Product> products);
+
+    /// <summary>
+    /// Counts active products per category, for the given category ids only.
+    /// Used to populate CategoryDto.ProductCount without loading full product rows.
+    /// </summary>
+    Task<Dictionary<Guid, int>> GetActiveProductCountsAsync(IEnumerable<Guid> categoryIds);
 }

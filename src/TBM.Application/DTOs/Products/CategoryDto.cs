@@ -11,6 +11,7 @@ public class CategoryDto
     public Guid? ParentCategoryId { get; set; }
     public string? ParentCategoryName { get; set; }
     public string? ImageUrl { get; set; }
+    public string? IconUrl { get; set; }
     public int DisplayOrder { get; set; }
     public bool IsActive { get; set; }
     public List<CategoryDto> SubCategories { get; set; } = new();

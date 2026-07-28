@@ -36,5 +36,6 @@ public interface IProductService
 
     // Bulk operations
     Task<ApiResponse<BulkCreateProductResultDto>> BulkCreateProductsAsync(List<CreateProductDto> products);
+    Task<ApiResponse<BulkUpdateProductResultDto>> BulkUpdateProductsAsync(List<BulkUpdateProductItemDto> products);
     Task<ApiResponse<ImportResultDto>> ImportProductsAsync(Stream fileStream, string fileName);
 }
