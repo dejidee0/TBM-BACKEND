@@ -34,6 +34,7 @@ public class UnitOfWork : IUnitOfWork
     public ICategoryRepository Categories { get; }
     public IProductRepository Products { get; }
     public IProductImageRepository ProductImages { get; }
+    public IProductVariantRepository ProductVariants { get; }
 
     // Order repositories
     public ICartRepository Carts { get; }
@@ -60,6 +61,7 @@ public class UnitOfWork : IUnitOfWork
         ICategoryRepository categoryRepository,
         IProductRepository productRepository,
         IProductImageRepository productImageRepository,
+        IProductVariantRepository productVariantRepository,
         ICartRepository cartRepository,
         IAIProjectRepository aiProjects,
         IAIDesignRepository aiDesigns,
@@ -87,6 +89,7 @@ public class UnitOfWork : IUnitOfWork
         Settings = settingRepository;
         Products = productRepository;
         ProductImages = productImageRepository;
+        ProductVariants = productVariantRepository;
         Carts = cartRepository;
         AIProjects = aiProjects;
         AIDesigns = aiDesigns;

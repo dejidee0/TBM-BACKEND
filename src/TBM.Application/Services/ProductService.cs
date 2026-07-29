@@ -402,23 +402,28 @@ public class ProductService : IProductService
         product.Color = dto.Color;
         product.Size = dto.Size;
 
-        // Replace variants only when the caller supplies them
+        // Replace variants only when the caller supplies them.
+        // New variants are added via the repository's explicit DbSet.Add() (forces
+        // Added state unconditionally) rather than product.Variants.Add() — adding to
+        // an already-loaded navigation collection on a tracked, pre-existing entity
+        // gets picked up by DetectChanges, which can misclassify a child with a
+        // non-default Guid Id as an existing row needing UPDATE instead of INSERT.
         if (dto.Variants != null)
         {
             product.Variants.Clear();
             foreach (var variant in MapVariantsFromDtos(dto.Variants, product.Id))
             {
-                product.Variants.Add(variant);
+                await _unitOfWork.ProductVariants.CreateAsync(variant);
             }
         }
 
-        // Replace images only when the caller supplies them
+        // Replace images only when the caller supplies them (same reasoning as above).
         if (dto.Images != null)
         {
             product.Images.Clear();
             foreach (var image in MapImagesFromDtos(dto.Images, product.Id))
             {
-                product.Images.Add(image);
+                await _unitOfWork.ProductImages.CreateAsync(image);
             }
         }
 
@@ -762,7 +767,7 @@ public class ProductService : IProductService
                 product.Variants.Clear();
                 foreach (var variant in MapVariantsFromDtos(dto.Variants, product.Id))
                 {
-                    product.Variants.Add(variant);
+                    await _unitOfWork.ProductVariants.CreateAsync(variant);
                 }
             }
 
@@ -771,7 +776,7 @@ public class ProductService : IProductService
                 product.Images.Clear();
                 foreach (var image in MapImagesFromDtos(dto.Images, product.Id))
                 {
-                    product.Images.Add(image);
+                    await _unitOfWork.ProductImages.CreateAsync(image);
                 }
             }
 

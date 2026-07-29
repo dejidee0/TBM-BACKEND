@@ -177,6 +177,7 @@ public sealed class DesignVisibilityTests
         public ICategoryRepository Categories => throw new NotImplementedException();
         public IProductRepository Products => throw new NotImplementedException();
         public IProductImageRepository ProductImages => throw new NotImplementedException();
+        public IProductVariantRepository ProductVariants => throw new NotImplementedException();
         public ICartRepository Carts => throw new NotImplementedException();
         public IOrderRepository Orders => throw new NotImplementedException();
         public IOrderStatusHistoryRepository OrderStatusHistories => throw new NotImplementedException();

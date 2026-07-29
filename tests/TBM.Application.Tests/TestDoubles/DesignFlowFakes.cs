@@ -48,6 +48,7 @@ internal sealed class FakeUnitOfWork : IUnitOfWork
     public ICategoryRepository Categories => throw new NotSupportedException();
     public IProductRepository Products { get; }
     public IProductImageRepository ProductImages => throw new NotSupportedException();
+    public IProductVariantRepository ProductVariants => throw new NotSupportedException();
     public ICartRepository Carts => CartStore;
     public IOrderRepository Orders { get; }
     public IOrderStatusHistoryRepository OrderStatusHistories => throw new NotSupportedException();

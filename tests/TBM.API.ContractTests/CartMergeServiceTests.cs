@@ -228,6 +228,7 @@ public sealed class CartMergeServiceTests
         public ICategoryRepository Categories => throw new NotImplementedException();
         public IProductRepository Products { get; }
         public IProductImageRepository ProductImages => throw new NotImplementedException();
+        public IProductVariantRepository ProductVariants => throw new NotImplementedException();
         public ICartRepository Carts { get; }
         public IOrderRepository Orders => throw new NotImplementedException();
         public IOrderStatusHistoryRepository OrderStatusHistories => throw new NotImplementedException();

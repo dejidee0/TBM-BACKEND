@@ -30,6 +30,7 @@ public interface IUnitOfWork : IDisposable
     ICategoryRepository Categories { get; }
     IProductRepository Products { get; }
     IProductImageRepository ProductImages { get; }
+    IProductVariantRepository ProductVariants { get; }
     
     // Order repositories
     ICartRepository Carts { get; }
